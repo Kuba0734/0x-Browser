@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { WebContentsView, type BrowserWindow, type Event, type Input } from 'electron'
 import type { BrowserState, PerfTab } from '../shared/types'
+import { userAgentFor } from './compat'
 import { recordVisit, updateTitle } from './history'
 import { getSettings } from './settings'
 import { HOME_URL, isInternalUrl, isWebUrl } from './url'
@@ -239,6 +240,9 @@ export class TabManager {
     }
     contents.on('will-navigate', (event) => guard(event, event.url))
     contents.on('will-redirect', (event) => guard(event, event.url))
+    contents.on('did-start-navigation', (event) => {
+      if (event.isMainFrame && !event.isSameDocument) contents.setUserAgent(userAgentFor(event.url))
+    })
     contents.on('before-input-event', this.onInput)
     contents.on('did-start-loading', () =>
       this.patch(tab, { loading: true, loadStart: Date.now() })

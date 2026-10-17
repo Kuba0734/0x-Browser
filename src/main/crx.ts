@@ -45,21 +45,33 @@ function* fields(buffer: Buffer): Generator<[number, Buffer]> {
   }
 }
 
+function crxHeader(crx: Buffer): Buffer | null {
+  return crx.readUInt32LE(4) === 3 ? crx.subarray(12, 12 + crx.readUInt32LE(8)) : null
+}
+
 export function crxPublicKeys(crx: Buffer): Buffer[] {
-  if (crx.readUInt32LE(4) !== 3) return []
-  const header = crx.subarray(12, 12 + crx.readUInt32LE(8))
+  if (crx.readUInt32LE(4) === 2) return [crx.subarray(16, 16 + crx.readUInt32LE(8))]
   const keys: Buffer[] = []
-  for (const [field, proof] of fields(header)) {
+  for (const [field, proof] of fields(crxHeader(crx) ?? Buffer.alloc(0))) {
     if (field !== 2) continue
     for (const [inner, key] of fields(proof)) if (inner === 1) keys.push(key)
   }
   return keys
 }
 
+const toLetters = (hex: string) =>
+  hex.replace(/./g, (char) => String.fromCharCode(97 + parseInt(char, 16)))
+
+export function crxId(crx: Buffer): string | null {
+  if (crx.readUInt32LE(4) === 2) return extensionId(crxPublicKeys(crx)[0])
+  for (const [field, signed] of fields(crxHeader(crx) ?? Buffer.alloc(0))) {
+    if (field !== 10000) continue
+    for (const [inner, id] of fields(signed))
+      if (inner === 1 && id.length === 16) return toLetters(id.toString('hex'))
+  }
+  return null
+}
+
 export function extensionId(publicKey: Buffer): string {
-  return createHash('sha256')
-    .update(publicKey)
-    .digest('hex')
-    .slice(0, 32)
-    .replace(/./g, (char) => String.fromCharCode(97 + parseInt(char, 16)))
+  return toLetters(createHash('sha256').update(publicKey).digest('hex').slice(0, 32))
 }

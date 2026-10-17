@@ -23,7 +23,7 @@
 - **Downloads** – live progress, pause, resume, cancel, open file or folder
 - **Settings** – every color, radius, spacing, font size and animation speed is adjustable and applies instantly
 - **Performance page** – memory, CPU and load time per tab, put tabs to sleep manually or automatically after inactivity
-- **Extensions** – install Chrome extensions from the Chrome Web Store link or load your own from a folder
+- **Extensions** – install from the Chrome Web Store, Edge Add-ons or Opera add-ons (an "Add to 0x" button appears on their pages) or load your own from a folder
 - **Import** – bookmarks and history from Chrome, Edge, Brave, Opera, Opera GX, Vivaldi and Firefox (cookies from Firefox)
 - **Dark mode for websites** – makes light websites like Google dark
 - **Automatic updates** – new versions are downloaded in the background and installed on restart

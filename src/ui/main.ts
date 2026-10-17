@@ -1,6 +1,7 @@
 import { api } from '../shared/client'
 import { icon, type IconName } from '../shared/icons'
 import { applySettings, type Settings } from '../shared/settings'
+import { storeTarget, type StoreTarget } from '../shared/stores'
 import type {
   BookmarkNode,
   BrowserState,
@@ -33,8 +34,6 @@ const storeLabel = storeButton.querySelector('.store-label') as HTMLElement
 const INTERNAL = 'ox://'
 const HOME = 'ox://home/'
 const sessionStart = Date.now()
-const STORE_DETAIL =
-  /^https:\/\/(?:chromewebstore\.google\.com\/detail|chrome\.google\.com\/webstore\/detail)\/(?:[^/?#]+\/)?([a-p]{32})/
 
 const tabEls = new Map<number, HTMLElement>()
 let state: BrowserState = { tabs: [], activeId: -1 }
@@ -44,6 +43,7 @@ let barNodes: BookmarkNode[] = []
 let showBar = false
 let installedIds = new Set<string>()
 let storeBusy = false
+const installedPages = new Set<string>()
 
 for (const el of document.querySelectorAll<HTMLElement>('[data-icon]'))
   el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon as IconName))
@@ -181,10 +181,17 @@ function renderStar(): void {
   starButton.title = bookmarked ? 'Remove bookmark' : 'Bookmark this page'
 }
 
+const storeKey = (target: StoreTarget) => `${target.store}:${target.key}`
+
 function renderStoreButton(): void {
-  const id = STORE_DETAIL.exec(activeTab()?.url ?? '')?.[1]
-  storeButton.hidden = !id || installedIds.has(id)
-  storeButton.dataset.id = id ?? ''
+  const url = activeTab()?.url ?? ''
+  const target = url.startsWith('https://') ? storeTarget(url) : null
+  const installed =
+    !!target &&
+    (installedPages.has(storeKey(target)) ||
+      (target.store !== 'opera' && installedIds.has(target.key)))
+  storeButton.hidden = !target || installed
+  storeButton.dataset.url = target ? url : ''
   if (storeBusy) return
   storeButton.disabled = false
   storeLabel.textContent = 'Add to 0x'
@@ -387,13 +394,15 @@ reloadButton.addEventListener('click', () =>
 )
 updateButton.addEventListener('click', () => api.updates.install())
 storeButton.addEventListener('click', async () => {
-  const id = storeButton.dataset.id
-  if (!id || storeBusy) return
+  const url = storeButton.dataset.url
+  const target = url ? storeTarget(url) : null
+  if (!url || !target || storeBusy) return
   storeBusy = true
   storeButton.disabled = true
   storeLabel.textContent = 'Installing…'
   try {
-    await api.extensions.installStore(id)
+    await api.extensions.installStore(url)
+    installedPages.add(storeKey(target))
     storeBusy = false
     renderStoreButton()
   } catch {

@@ -17,3 +17,12 @@ if (process.argv.includes('--ox-ui') || location.protocol === 'ox:') {
       ipcRenderer.on(check(channel), (_event, value) => listener(value))
   })
 }
+
+// Google sign-in gets a Firefox user agent (see main/compat.ts); Firefox has no userAgentData,
+// so the Chromium client hints must not leak through JavaScript either.
+if (location.hostname === 'accounts.google.com') {
+  contextBridge.executeInMainWorld({
+    func: () =>
+      Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined })
+  })
+}

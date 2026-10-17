@@ -5,7 +5,8 @@ import { extname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { BrowserWindow, dialog, net, session } from 'electron'
 import type { ExtensionInfo } from '../shared/types'
-import { crxPublicKeys, crxToZip, extensionId } from './crx'
+import { storePackageUrl, storeTarget } from '../shared/stores'
+import { crxId, crxPublicKeys, crxToZip, extensionId } from './crx'
 import { broadcast } from './ipc'
 import { log } from './logger'
 import { dataPath, readJson, writeJson } from './store'
@@ -24,7 +25,6 @@ type Manifest = Record<string, unknown> & {
 }
 
 const FILE = 'extensions.json'
-const STORE_ID = /[a-p]{32}/
 const TAR = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
 const extensions = () => session.defaultSession.extensions
 let installed: Installed[] = []
@@ -141,15 +141,13 @@ export async function installFromFolder(win: BrowserWindow): Promise<ExtensionIn
 }
 
 export async function installFromStore(input: string): Promise<ExtensionInfo> {
-  const id = STORE_ID.exec(input)?.[0]
-  if (!id) throw new Error('Enter a Chrome Web Store link or extension ID')
-  const url =
-    'https://clients2.google.com/service/update2/crx?response=redirect' +
-    `&prodversion=${process.versions.chrome}&acceptformat=crx2,crx3&x=id%3D${id}%26uc`
-  const response = await net.fetch(url)
+  const target = storeTarget(input)
+  if (!target) throw new Error('Enter a Chrome Web Store, Edge Add-ons or Opera add-ons link')
+  const response = await net.fetch(storePackageUrl(target, process.versions.chrome))
   if (!response.ok) throw new Error('Extension could not be downloaded')
   const crx = Buffer.from(await response.arrayBuffer())
   const zip = crxToZip(crx)
+  const id = crxId(crx) ?? target.key
   const root = dataPath('extensions')
   const dir = join(root, `${id}-${randomUUID()}`)
   const zipPath = `${dir}.zip`

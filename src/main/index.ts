@@ -39,6 +39,7 @@ import {
   removeExtension,
   setExtensionEnabled
 } from './extensions'
+import { initCompat } from './compat'
 import { closeHistory, completeHistory, openHistory, topSites } from './history'
 import { importSources, runImport } from './importer'
 import { registerInternalProtocol, rendererUrl } from './internal'
@@ -304,6 +305,7 @@ app.whenReady().then(async () => {
   loadBookmarks()
   loadDownloads()
   initDownloads(session.defaultSession)
+  initCompat(session.defaultSession)
   session.defaultSession.registerPreloadScript({
     type: 'service-worker',
     filePath: join(__dirname, '../preload/service-worker.js')

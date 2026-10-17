@@ -16,9 +16,9 @@ const list = h('div', { class: 'ext-list' }, ...skeletons(3))
 const storeInput = h('input', {
   class: 'input',
   type: 'text',
-  placeholder: 'Paste a Chrome Web Store link or extension ID',
+  placeholder: 'Paste a Chrome Web Store, Edge Add-ons or Opera add-ons link',
   spellcheck: false,
-  'aria-label': 'Chrome Web Store link'
+  'aria-label': 'Extension store link'
 })
 const installButton = h('button', {
   class: 'btn primary',
