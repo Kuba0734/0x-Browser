@@ -59,6 +59,7 @@ export const api = {
   ui: {
     setChromeHeight: (height: number) => send('ui:chrome-height', height),
     menu: (x: number, y: number) => send('ui:menu', x, y),
+    tabMenu: (id: number, x: number, y: number) => send('ui:tab-menu', id, x, y),
     bookmarkMenu: (id: string, x: number, y: number) => send('ui:bookmark-menu', id, x, y),
     bookmarkContext: (id: string, x: number, y: number) => send('ui:bookmark-context', id, x, y),
     extensionPopup: (id: string, x: number, y: number) => send('ui:extension-popup', id, x, y),
@@ -145,6 +146,9 @@ export const api = {
       invoke<void>('permissions:set', origin, key, value),
     clearSite: (origin: string) => invoke<void>('permissions:clear-site', origin),
     onChange: on<SitePermissions[]>('permissions:changed')
+  },
+  privacy: {
+    clear: (kinds: string[]) => invoke<void>('privacy:clear', kinds)
   },
   importer: {
     sources: () => invoke<ImportSource[]>('import:sources'),

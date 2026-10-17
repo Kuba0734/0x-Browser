@@ -215,3 +215,48 @@ export function popupPageMenu(
   items.push({ label: 'Inspect', click: () => contents.inspectElement(params.x, params.y) })
   Menu.buildFromTemplate(items).popup({ window: win })
 }
+
+export function popupTabMenu(
+  win: BrowserWindow,
+  tabs: TabManager,
+  id: number,
+  x: number,
+  y: number
+): void {
+  const tab = tabs.tabInfo(id)
+  if (!tab) return
+  popup(
+    win,
+    [
+      {
+        label: 'New tab',
+        accelerator: 'Ctrl+T',
+        click: () => tabs.create(undefined, tab.index + 1)
+      },
+      { type: 'separator' },
+      { label: 'Reload', click: () => tabs.reloadTab(id) },
+      { label: 'Duplicate', click: () => tabs.duplicate(id) },
+      {
+        label: tab.muted ? 'Unmute site' : 'Mute site',
+        enabled: !tab.sleeping,
+        click: () => tabs.setMuted(id, !tab.muted)
+      },
+      { label: 'Sleep tab', enabled: !tab.active && !tab.sleeping, click: () => tabs.sleep(id) },
+      {
+        label: 'Move to new window',
+        enabled: tab.count > 1,
+        click: () => appActions.moveTabToNewWindow(tabs, id)
+      },
+      { type: 'separator' },
+      { label: 'Close tab', accelerator: 'Ctrl+W', click: () => tabs.close(id) },
+      { label: 'Close other tabs', enabled: tab.count > 1, click: () => tabs.closeOthers(id) },
+      {
+        label: 'Close tabs to the right',
+        enabled: tab.index < tab.count - 1,
+        click: () => tabs.closeToRight(id)
+      }
+    ],
+    x,
+    y
+  )
+}

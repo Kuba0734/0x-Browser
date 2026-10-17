@@ -15,7 +15,7 @@ import {
   type SitePermissions
 } from '../../shared/permissions'
 import type { ImportSource, UpdateState } from '../../shared/types'
-import { api, errorMessage, h, initPage, reveal, toast } from '../shared/kit'
+import { api, confirmDialog, errorMessage, h, initPage, reveal, toast } from '../shared/kit'
 import './settings.css'
 
 const SLEEP_OPTIONS: [number, string][] = [
@@ -356,6 +356,52 @@ function sitePermissions(): HTMLElement {
   return host
 }
 
+const CLEARABLE: [string, string, string, boolean][] = [
+  ['history', 'Browsing history', 'Visited pages, address bar suggestions and site icons', true],
+  [
+    'cookies',
+    'Cookies and site data',
+    'Signs you out of most websites. Extension data is kept.',
+    true
+  ],
+  ['cache', 'Cached images and files', 'Pages may load a little slower the next time', true],
+  ['downloads', 'Download list', 'The files themselves stay on your computer', false],
+  [
+    'permissions',
+    'Site permissions',
+    'Camera, microphone, location and notification choices',
+    false
+  ]
+]
+
+function clearData(): HTMLElement {
+  const choices = CLEARABLE.map(([kind, label, description, checked]) => {
+    const input = h('input', { class: 'switch', type: 'checkbox', checked, 'aria-label': label })
+    return { kind, input, row: setting(label, description, input) }
+  })
+  const button = h('button', { class: 'btn danger', icon: 'trash', text: 'Clear data' })
+  button.addEventListener('click', async () => {
+    const kinds = choices.filter((choice) => choice.input.checked).map((choice) => choice.kind)
+    if (!kinds.length) return toast('Select something to clear', 'error')
+    if (!(await confirmDialog('Clear the selected browsing data?', 'Clear data'))) return
+    button.disabled = true
+    try {
+      await api.privacy.clear(kinds)
+      toast('Browsing data cleared', 'success')
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    } finally {
+      button.disabled = false
+    }
+  })
+  return h(
+    'div',
+    { class: 'card' },
+    ...choices.map((choice) => choice.row),
+    h('div', { class: 'row setting setting-end' }, button)
+  )
+}
+
 const importHost = h('div', {}, h('div', { class: 'skeleton' }))
 
 const LINKS: [InternalPage, string, IconName][] = [
@@ -463,6 +509,10 @@ page.append(
   section(
     h('h2', { class: 'section-title', id: 'permissions', text: 'Site permissions' }),
     sitePermissions()
+  ),
+  section(
+    h('h2', { class: 'section-title', id: 'privacy', text: 'Clear browsing data' }),
+    clearData()
   ),
   section(h('h2', { class: 'section-title', id: 'import', text: 'Import data' }), importHost),
   section(

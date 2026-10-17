@@ -103,11 +103,48 @@ export class TabManager {
     }
   }
 
-  create(url = HOME_URL): void {
+  create(url = HOME_URL, index = this.tabs.length): void {
     const tab = this.newTab(url)
-    this.tabs.push(tab)
+    this.tabs.splice(index, 0, tab)
     this.load(tab, url)
     this.activate(tab.id)
+  }
+
+  tabInfo(id: number) {
+    const tab = this.byId(id)
+    if (!tab) return null
+    return {
+      url: tab.url,
+      index: this.tabs.indexOf(tab),
+      count: this.tabs.length,
+      active: tab.id === this.activeId,
+      sleeping: tab.sleeping,
+      muted: !!tab.view?.webContents.isAudioMuted()
+    }
+  }
+
+  reloadTab(id: number): void {
+    const tab = this.byId(id)
+    if (tab?.view) tab.view.webContents.reload()
+    else if (tab) this.activate(id)
+  }
+
+  duplicate(id: number): void {
+    const tab = this.byId(id)
+    if (tab) this.create(tab.url, this.tabs.indexOf(tab) + 1)
+  }
+
+  setMuted(id: number, muted: boolean): void {
+    this.byId(id)?.view?.webContents.setAudioMuted(muted)
+  }
+
+  closeOthers(id: number): void {
+    for (const tab of [...this.tabs]) if (tab.id !== id) this.close(tab.id)
+  }
+
+  closeToRight(id: number): void {
+    const index = this.tabs.findIndex((tab) => tab.id === id)
+    if (index >= 0) for (const tab of this.tabs.slice(index + 1)) this.close(tab.id)
   }
 
   snapshot(): SavedWindow {

@@ -51,8 +51,15 @@ import {
 } from './extensions'
 import { appActions } from './app-actions'
 import { initCompat } from './compat'
-import { allFavicons, flushFavicons, loadFavicons } from './favicons'
-import { closeHistory, completeHistory, openHistory, searchHistory, topSites } from './history'
+import { allFavicons, clearFavicons, flushFavicons, loadFavicons } from './favicons'
+import {
+  clearHistory,
+  closeHistory,
+  completeHistory,
+  openHistory,
+  searchHistory,
+  topSites
+} from './history'
 import { searchSuggestions } from './suggest'
 import { importSources, runImport } from './importer'
 import { registerInternalProtocol, rendererUrl } from './internal'
@@ -63,11 +70,13 @@ import {
   popupBookmarkContext,
   popupBookmarkFolder,
   popupExtensionsMenu,
-  popupPageMenu
+  popupPageMenu,
+  popupTabMenu
 } from './menus'
 import { perfSnapshot } from './performance'
 import {
   answerPrompt,
+  clearAllPermissions,
   clearSite,
   initPermissions,
   listPermissions,
@@ -322,6 +331,11 @@ onSettingsChange((settings) => {
   previousSleep = settings.sleepAfterMinutes
 })
 
+appActions.moveTabToNewWindow = (tabs, id) => {
+  const tab = tabs.detach(id)
+  if (tab) createWindow({ tab })
+}
+
 appActions.newWindow = (url) => {
   createWindow({ url })
 }
@@ -398,6 +412,9 @@ function registerIpc(): void {
   )
   listen('ui:extension-popup', (sender, id, x, y) =>
     openExtensionPopup(winOf(sender), str(id), ...coords(x, y))
+  )
+  listen('ui:tab-menu', (sender, id, x, y) =>
+    popupTabMenu(winOf(sender), tabsOf(sender), int(id), ...coords(x, y))
   )
   listen('ui:extensions-menu', (sender, x, y) =>
     popupExtensionsMenu(winOf(sender), tabsOf(sender), ...coords(x, y))
@@ -530,6 +547,36 @@ function registerIpc(): void {
   handle('update:state', () => updateState())
   listen('update:check', () => checkForUpdates())
   listen('update:install', () => installUpdate())
+
+  handle('privacy:clear', async (_sender, kinds) => {
+    if (!Array.isArray(kinds)) throw new TypeError('Expected list')
+    const selected = new Set(kinds.map(str))
+    if (selected.has('history')) {
+      clearHistory()
+      clearFavicons()
+    }
+    if (selected.has('cookies')) {
+      // Extension storage (e.g. pairing tokens) is not browsing data and stays untouched.
+      const extensionOrigins = listExtensions().map(
+        (extension) => `chrome-extension://${extension.id}`
+      )
+      await session.defaultSession.clearData({
+        dataTypes: [
+          'cookies',
+          'localStorage',
+          'indexedDB',
+          'serviceWorkers',
+          'fileSystems',
+          'webSQL',
+          'backgroundFetch'
+        ],
+        ...(extensionOrigins.length ? { excludeOrigins: extensionOrigins } : {})
+      })
+    }
+    if (selected.has('cache')) await session.defaultSession.clearCache()
+    if (selected.has('downloads')) clearDownloads()
+    if (selected.has('permissions')) clearAllPermissions()
+  })
 
   handle('import:sources', () => importSources())
   handle('import:run', (_sender, sourceId, kinds) => {

@@ -1,3 +1,11 @@
-type AppActions = { newWindow: (url?: string) => void }
+import type { TabManager } from './tabs'
 
-export const appActions: AppActions = { newWindow: () => undefined }
+type AppActions = {
+  newWindow: (url?: string) => void
+  moveTabToNewWindow: (tabs: TabManager, id: number) => void
+}
+
+export const appActions: AppActions = {
+  newWindow: () => undefined,
+  moveTabToNewWindow: () => undefined
+}

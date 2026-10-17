@@ -83,6 +83,10 @@ function createTabEl(id: number): HTMLElement {
   el.addEventListener('auxclick', (event) => {
     if (event.button === 1) closeTab(id)
   })
+  el.addEventListener('contextmenu', (event) => {
+    event.preventDefault()
+    api.ui.tabMenu(id, event.clientX, event.clientY)
+  })
   const close = el.querySelector('.tab-close') as HTMLButtonElement
   close.addEventListener('mousedown', (event) => event.stopPropagation())
   close.draggable = false

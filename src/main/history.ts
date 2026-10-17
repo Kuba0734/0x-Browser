@@ -114,3 +114,7 @@ export function completeHistory(text: string): Completion | null {
   const { origin, host } = new URL(row.url)
   return { url: `${origin}/`, bare: bareUrl(`https://${host}`) }
 }
+
+export function clearHistory(): void {
+  db?.exec('DELETE FROM visits')
+}

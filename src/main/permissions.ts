@@ -185,3 +185,8 @@ export function initPermissions(
     event.returnValue = origin ? QUERYABLE.filter((key) => !decision(origin, key)) : []
   })
 }
+
+export function clearAllPermissions(): void {
+  store = {}
+  save()
+}

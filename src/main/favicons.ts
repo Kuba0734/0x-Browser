@@ -76,3 +76,9 @@ export async function resolveFavicon(pageUrl: string, candidates: string[]): Pro
   }
   return ''
 }
+
+export function clearFavicons(): void {
+  byOrigin = {}
+  byUrl.clear()
+  saver.schedule()
+}
