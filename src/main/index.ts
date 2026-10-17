@@ -50,7 +50,6 @@ import {
   setExtensionPinned
 } from './extensions'
 import { appActions } from './app-actions'
-import { initCompat } from './compat'
 import { allFavicons, clearFavicons, flushFavicons, loadFavicons } from './favicons'
 import {
   clearHistory,
@@ -412,7 +411,7 @@ function registerIpc(): void {
     popupBookmarkContext(winOf(sender), tabsOf(sender), str(id), ...coords(x, y))
   )
   listen('ui:extension-popup', (sender, id, x, y) =>
-    openExtensionPopup(winOf(sender), str(id), ...coords(x, y))
+    openExtensionPopup(winOf(sender), str(id), ...coords(x, y), tabsOf(sender).activeContents?.id)
   )
   listen('ui:tab-menu', (sender, id, x, y) =>
     popupTabMenu(winOf(sender), tabsOf(sender), int(id), ...coords(x, y))
@@ -604,11 +603,11 @@ app.whenReady().then(async () => {
   initPermissions(session.defaultSession, presenterFor)
   loadDownloads()
   initDownloads(session.defaultSession)
-  initCompat(session.defaultSession)
-  session.defaultSession.registerPreloadScript({
-    type: 'service-worker',
-    filePath: join(__dirname, '../preload/service-worker.js')
-  })
+  for (const type of ['service-worker', 'frame'] as const)
+    session.defaultSession.registerPreloadScript({
+      type,
+      filePath: join(__dirname, '../preload/extension.js')
+    })
   await loadExtensions()
   const saved = loadSession()
   await Promise.all(

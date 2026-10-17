@@ -103,7 +103,7 @@ export function popupExtensionsMenu(
   const icon = (dataUrl: string) =>
     dataUrl ? nativeImage.createFromDataURL(dataUrl).resize({ width: 16, height: 16 }) : undefined
   const open = (extension: ExtensionInfo) => {
-    if (extension.hasPopup) openExtensionPopup(win, extension.id, x, y)
+    if (extension.hasPopup) openExtensionPopup(win, extension.id, x, y, tabs.activeContents?.id)
     else if (extension.optionsUrl) tabs.create(extension.optionsUrl)
   }
   const items: MenuItemConstructorOptions[] = extensions.length

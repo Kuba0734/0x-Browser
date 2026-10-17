@@ -10,7 +10,7 @@ export default defineConfig({
       rolldownOptions: {
         input: {
           index: resolve('src/preload/index.ts'),
-          'service-worker': resolve('src/preload/service-worker.ts')
+          extension: resolve('src/preload/extension.ts')
         }
       }
     }

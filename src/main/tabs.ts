@@ -8,7 +8,8 @@ import {
   type WebContents
 } from 'electron'
 import type { BrowserState, PerfTab } from '../shared/types'
-import { userAgentFor } from './compat'
+import { applyUserAgent, userAgentFor } from './compat'
+import { dispatchExtensionEvent } from './extensions'
 import { cachedFavicon, resolveFavicon } from './favicons'
 import { recordVisit, updateTitle } from './history'
 import { getSettings } from './settings'
@@ -64,7 +65,7 @@ export class TabManager {
     return this.tabs.find((tab) => tab.id === this.activeId)
   }
 
-  private get activeContents() {
+  get activeContents() {
     return this.active?.view?.webContents
   }
 
@@ -355,7 +356,7 @@ export class TabManager {
     const view = tab.view ?? this.createView(tab)
     tab.url = url
     view.setBackgroundColor(backgroundFor(url))
-    view.webContents.loadURL(url).catch(() => undefined)
+    view.webContents.loadURL(url, { userAgent: userAgentFor(url) }).catch(() => undefined)
     this.emit()
   }
 
@@ -380,10 +381,36 @@ export class TabManager {
     const guard = (event: Event, url: string) => {
       if (isInternalUrl(url) && !isInternalUrl(contents.getURL())) event.preventDefault()
     }
-    contents.on('will-navigate', (event) => guard(event, event.url))
-    contents.on('will-redirect', (event) => guard(event, event.url))
+    const setUserAgent = (event: { url: string; isMainFrame: boolean }) => {
+      if (event.isMainFrame) applyUserAgent(contents, event.url)
+    }
+    contents.on('will-navigate', (event) => {
+      guard(event, event.url)
+      setUserAgent(event)
+    })
+    contents.on('will-redirect', (event) => {
+      guard(event, event.url)
+      setUserAgent(event)
+    })
+    const navigation = () => ({
+      tabId: contents.id,
+      frameId: 0,
+      parentFrameId: -1,
+      url: contents.getURL(),
+      timeStamp: Date.now()
+    })
+    contents.on('did-navigate', () =>
+      dispatchExtensionEvent('webNavigation.onCommitted', {
+        ...navigation(),
+        transitionType: 'link',
+        transitionQualifiers: []
+      })
+    )
+    contents.on('dom-ready', () =>
+      dispatchExtensionEvent('webNavigation.onDOMContentLoaded', navigation())
+    )
     contents.on('did-start-navigation', (event) => {
-      if (event.isMainFrame && !event.isSameDocument) contents.setUserAgent(userAgentFor(event.url))
+      if (!event.isSameDocument) setUserAgent(event)
     })
     contents.on('before-input-event', (event, input) => tab.owner.options.onInput(event, input))
     contents.on('context-menu', (_event, params) =>

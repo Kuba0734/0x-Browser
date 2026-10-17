@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
 import { promisify } from 'node:util'
-import { BrowserWindow, dialog, net, session } from 'electron'
+import { BrowserWindow, dialog, net, session, webContents } from 'electron'
 import type { ExtensionInfo } from '../shared/types'
 import { storePackageUrl, storeTarget } from '../shared/stores'
 import { crxId, crxPublicKeys, crxToZip, extensionId } from './crx'
@@ -205,7 +205,22 @@ export function extensionOptionsUrl(id: string): string {
   return info(entry(id)).optionsUrl
 }
 
-export function openExtensionPopup(win: BrowserWindow, id: string, x: number, y: number): void {
+// Electron sends extensions no tab or navigation events. MV2 background pages share their world with
+// the polyfill preload, so its stand-in events can be fired from here.
+export function dispatchExtensionEvent(path: string, details: Record<string, unknown>): void {
+  const script = `globalThis.chrome?.${path}?.dispatch?.(${JSON.stringify(details)})`
+  for (const contents of webContents.getAllWebContents())
+    if (contents.getType() === 'backgroundPage')
+      contents.executeJavaScript(script).catch(() => undefined)
+}
+
+export function openExtensionPopup(
+  win: BrowserWindow,
+  id: string,
+  x: number,
+  y: number,
+  tabId?: number
+): void {
   const item = entry(id)
   const manifest = readManifest(item.dir)
   const page = manifest.action?.default_popup ?? manifest.browser_action?.default_popup
@@ -236,5 +251,7 @@ export function openExtensionPopup(win: BrowserWindow, id: string, x: number, y:
     popup.setPosition(Math.round(bounds.x + x - popup.getSize()[0]), Math.round(bounds.y + y))
     popup.show()
   })
-  popup.loadURL(`chrome-extension://${id}/${page.replace(/^\//, '')}`).catch(() => popup.close())
+  const url = new URL(`chrome-extension://${id}/${page.replace(/^\//, '')}`)
+  if (tabId !== undefined) url.searchParams.set('tabId', String(tabId))
+  popup.loadURL(url.href).catch(() => popup.close())
 }
