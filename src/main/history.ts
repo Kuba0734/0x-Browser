@@ -53,6 +53,18 @@ export function updateTitle(url: string, title: string): void {
   if (db) setTitle.run(title, url)
 }
 
+export function searchHistory(text: string, limit = 4): TopSite[] {
+  const query = text.trim()
+  if (!db || !query) return []
+  const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`
+  return db
+    .prepare(
+      `SELECT url, title FROM visits WHERE bare LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\'
+      ORDER BY visit_count DESC, last_visit DESC LIMIT ?`
+    )
+    .all(pattern, pattern, limit) as TopSite[]
+}
+
 export function topSites(limit = 8): TopSite[] {
   if (!db) return []
   return db

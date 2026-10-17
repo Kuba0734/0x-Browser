@@ -59,3 +59,48 @@ select.setting-select {
 .appearance-header .section-title {
   margin: 0;
 }
+
+.settings-search {
+  position: sticky;
+  top: var(--space-4);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  backdrop-filter: blur(var(--blur));
+  box-shadow: var(--shadow-soft);
+  color: var(--text-faint);
+  transition:
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.settings-search:focus-within {
+  border-color: var(--border-strong);
+  box-shadow:
+    var(--shadow-soft),
+    0 0 0 3px var(--accent-glow);
+}
+
+.settings-search-input {
+  flex: 1;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.settings-search-input:focus {
+  box-shadow: none;
+}
+
+.settings-search + .empty {
+  margin-top: var(--space-6);
+}

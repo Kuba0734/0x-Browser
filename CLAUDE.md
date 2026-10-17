@@ -65,7 +65,7 @@ Performance hat Vorrang vor Optik: Wenn eine Design- oder Animationsregel die Pe
 - Webinhalte strikt vom Browser-Kern isoliert (Sandbox, keine Node-/System-APIs im Web-Content)
 - Electron: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false` für alle WebContents; Web-Tabs bekommen kein Preload mit Kern-Zugriff
 - Interne `0x://`-Seiten sind von normalen Webseiten aus nicht erreichbar
-- Keine Telemetrie, keine externen Requests außer den vom Nutzer aufgerufenen Seiten und dem Update-Check gegen GitHub Releases beim Start
+- Keine Telemetrie, keine externen Requests außer den vom Nutzer aufgerufenen Seiten, dem Update-Check gegen GitHub Releases beim Start und den Suchvorschlägen der gewählten Suchmaschine beim Tippen (in Settings abschaltbar)
 
 ## Logging
 - Nur Crashes, Renderer-Abstürze und fehlgeschlagene Downloads/Updates

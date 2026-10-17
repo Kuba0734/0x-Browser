@@ -1,5 +1,14 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, nativeTheme, session, type WebContents } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  nativeTheme,
+  screen,
+  session,
+  WebContentsView,
+  type WebContents
+} from 'electron'
 import {
   DEFAULT_SETTINGS,
   DESIGN_TOKENS,
@@ -43,7 +52,8 @@ import {
 import { appActions } from './app-actions'
 import { initCompat } from './compat'
 import { allFavicons, flushFavicons, loadFavicons } from './favicons'
-import { closeHistory, completeHistory, openHistory, topSites } from './history'
+import { closeHistory, completeHistory, openHistory, searchHistory, topSites } from './history'
+import { searchSuggestions } from './suggest'
 import { importSources, runImport } from './importer'
 import { registerInternalProtocol, rendererUrl } from './internal'
 import { addUi, bool, handle, int, listen, optStr, str } from './ipc'
@@ -119,7 +129,7 @@ function createSplash(): BrowserWindow {
   return splash
 }
 
-type AppWindow = { win: BrowserWindow; tabs: TabManager }
+type AppWindow = { win: BrowserWindow; tabs: TabManager; suggest: WebContentsView }
 
 const SESSION_FILE = 'session.json'
 const windows = new Set<AppWindow>()
@@ -156,7 +166,12 @@ function loadSession(): SavedWindow[] {
 
 function windowFor(sender: WebContents): AppWindow {
   for (const entry of windows)
-    if (entry.win.webContents === sender || entry.tabs.owns(sender)) return entry
+    if (
+      entry.win.webContents === sender ||
+      entry.suggest.webContents === sender ||
+      entry.tabs.owns(sender)
+    )
+      return entry
   const focused = BrowserWindow.getFocusedWindow()
   const fallback = [...windows].find((entry) => entry.win === focused) ?? [...windows][0]
   if (!fallback) throw new TypeError('No window')
@@ -165,6 +180,23 @@ function windowFor(sender: WebContents): AppWindow {
 
 function windowForTab(id: number): AppWindow | undefined {
   return [...windows].find((entry) => entry.tabs.has(id))
+}
+
+function createSuggestView(): WebContentsView {
+  const view = new WebContentsView({
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      additionalArguments: ['--ox-ui'],
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  view.setBackgroundColor('#00000000')
+  view.setVisible(false)
+  addUi(view.webContents)
+  view.webContents.loadURL(rendererUrl('suggest/index.html'))
+  return view
 }
 
 type WindowOptions = { saved?: SavedWindow; tab?: Tab; url?: string; x?: number; y?: number }
@@ -202,7 +234,10 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
     canCloseWindow: () => windows.size > 1,
     onContextMenu: (contents, params) => popupPageMenu(win, tabs, contents, params)
   })
-  const entry: AppWindow = { win, tabs }
+  const suggest = createSuggestView()
+  win.contentView.addChildView(suggest)
+  win.on('resize', () => suggest.setVisible(false))
+  const entry: AppWindow = { win, tabs, suggest }
   windows.add(entry)
 
   ui.on('will-navigate', (event) => event.preventDefault())
@@ -215,6 +250,7 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
     }
   })
   win.on('closed', () => {
+    suggest.webContents.close()
     windows.delete(entry)
     tabs.destroyAll()
     saveSession()
@@ -259,10 +295,36 @@ function registerIpc(): void {
   listen('tabs:close', (sender, id) => tabsOf(sender).close(int(id)))
   listen('tabs:activate', (sender, id) => tabsOf(sender).activate(int(id)))
   listen('tabs:move', (sender, id, index) => tabsOf(sender).move(int(id), int(index)))
-  listen('tabs:detach', (sender, id, x, y) => {
-    const [screenX, screenY] = coords(x, y)
-    const tab = tabsOf(sender).detach(int(id))
-    if (tab) createWindow({ tab, x: Math.round(screenX - 120), y: Math.round(screenY - 20) })
+  listen('tabs:detach', (sender, id) => {
+    const source = windowFor(sender)
+    const cursor = screen.getCursorScreenPoint()
+    const bounds = source.win.getBounds()
+    const overStrip =
+      cursor.x >= bounds.x &&
+      cursor.x <= bounds.x + bounds.width &&
+      cursor.y >= bounds.y &&
+      cursor.y <= bounds.y + TABSTRIP_HEIGHT * 2
+    if (overStrip) return
+    const position = { x: cursor.x - 120, y: cursor.y - 20 }
+    if (source.tabs.size === 1) {
+      source.win.setPosition(position.x, position.y)
+      return
+    }
+    const tab = source.tabs.detach(int(id))
+    if (tab) createWindow({ tab, ...position })
+  })
+  listen('tabs:attach', (sender, id, index) => {
+    const target = windowFor(sender)
+    const source = windowForTab(int(id))
+    if (!source) return
+    if (source === target) {
+      target.tabs.move(int(id), int(index))
+      return
+    }
+    const tab = source.tabs.detach(int(id), true)
+    if (!tab) return
+    target.tabs.adopt(tab, int(index))
+    target.win.focus()
   })
   listen('tabs:open-internal', (sender, page) => {
     const url = internalUrl(str(page))
@@ -298,6 +360,27 @@ function registerIpc(): void {
 
   handle('history:complete', (_sender, text) => completeHistory(str(text)))
   handle('history:top', () => topSites())
+  handle('history:search', (_sender, text) => searchHistory(str(text)))
+  handle('search:suggest', (_sender, text) => searchSuggestions(str(text)))
+  listen('suggest:show', (sender, items, selected, x, y, width) => {
+    if (!Array.isArray(items) || items.length > 10) return
+    const { win, suggest } = windowFor(sender)
+    const [left, top] = coords(x, y)
+    suggest.setBounds({
+      x: Math.round(left),
+      y: Math.round(top),
+      width: Math.round(Number(width) || 400),
+      height: items.length * 36 + 10
+    })
+    win.contentView.addChildView(suggest)
+    suggest.setVisible(true)
+    suggest.webContents.send('suggest:items', { items, selected: Number(selected) })
+  })
+  listen('suggest:hide', (sender) => windowFor(sender).suggest.setVisible(false))
+  listen('suggest:pick', (sender, index) => {
+    const { win } = windowFor(sender)
+    win.webContents.send('suggest:picked', int(index))
+  })
   handle('favicons:all', () => allFavicons())
 
   handle('bookmarks:tree', () => bookmarkTree())

@@ -153,18 +153,24 @@ export class TabManager {
     this.emit()
   }
 
-  detach(id: number): Tab | null {
+  detach(id: number, allowLast = false): Tab | null {
     const tab = this.byId(id)
-    if (!tab || this.tabs.length < 2) return null
-    this.release(tab)
+    if (!tab || (this.tabs.length < 2 && !allowLast)) return null
     if (tab.view) this.win.contentView.removeChildView(tab.view)
+    if (this.tabs.length === 1) {
+      this.tabs.length = 0
+      clearTimeout(tab.sleepTimer)
+      setImmediate(() => this.win.close())
+      return tab
+    }
+    this.release(tab)
     this.emit()
     return tab
   }
 
-  adopt(tab: Tab): void {
+  adopt(tab: Tab, index = this.tabs.length): void {
     tab.owner = this
-    this.tabs.push(tab)
+    this.tabs.splice(Math.max(0, Math.min(index, this.tabs.length)), 0, tab)
     if (tab.view) this.win.contentView.addChildView(tab.view)
     this.activate(tab.id)
   }

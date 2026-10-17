@@ -96,3 +96,11 @@ export type ImportResult = {
   history: number
   cookies: number
 }
+
+export type Suggestion = {
+  kind: 'go' | 'history' | 'search'
+  label: string
+  detail: string
+  input: string
+  favicon: string
+}

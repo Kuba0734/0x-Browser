@@ -1,15 +1,36 @@
 export const SEARCH_ENGINES = {
-  google: { name: 'Google', url: 'https://www.google.com/search?q=' },
-  duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
-  bing: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
-  brave: { name: 'Brave Search', url: 'https://search.brave.com/search?q=' },
-  ecosia: { name: 'Ecosia', url: 'https://www.ecosia.org/search?q=' }
+  google: {
+    name: 'Google',
+    url: 'https://www.google.com/search?q=',
+    suggest: 'https://suggestqueries.google.com/complete/search?client=firefox&ie=UTF-8&oe=UTF-8&q='
+  },
+  duckduckgo: {
+    name: 'DuckDuckGo',
+    url: 'https://duckduckgo.com/?q=',
+    suggest: 'https://duckduckgo.com/ac/?type=list&q='
+  },
+  bing: {
+    name: 'Bing',
+    url: 'https://www.bing.com/search?q=',
+    suggest: 'https://api.bing.com/osjson.aspx?query='
+  },
+  brave: {
+    name: 'Brave Search',
+    url: 'https://search.brave.com/search?q=',
+    suggest: 'https://search.brave.com/api/suggest?q='
+  },
+  ecosia: {
+    name: 'Ecosia',
+    url: 'https://www.ecosia.org/search?q=',
+    suggest: 'https://ac.ecosia.org/autocomplete?type=list&q='
+  }
 }
 
 export type SearchEngine = keyof typeof SEARCH_ENGINES
 
 export type Settings = {
   searchEngine: SearchEngine
+  searchSuggestions: boolean
   showBookmarkBar: boolean
   reducedMotion: boolean
   forceDarkWeb: boolean
@@ -21,6 +42,7 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   searchEngine: 'google',
+  searchSuggestions: true,
   showBookmarkBar: true,
   reducedMotion: false,
   forceDarkWeb: true,

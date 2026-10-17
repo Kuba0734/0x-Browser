@@ -62,6 +62,7 @@ svg {
   gap: var(--space-1);
   min-width: 0;
   height: 100%;
+  app-region: no-drag;
 }
 
 .tab {
@@ -102,15 +103,20 @@ svg {
 }
 
 .tab.dragging {
-  z-index: 2;
-  background: var(--surface-raised);
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-soft);
-  cursor: grabbing;
+  opacity: 0.35;
 }
 
-.tab.detaching {
-  opacity: 0.6;
+.drop-marker {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  pointer-events: none;
+  animation: fade-in var(--duration-fast) var(--ease) both;
 }
 
 .tab.leaving {
@@ -502,7 +508,37 @@ svg {
 }
 
 #downloads-button.active {
+  display: flex;
+  gap: 6px;
+  width: auto;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
   color: var(--text);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#downloads-button.active .download-progress {
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: 3px;
+}
+
+.download-label:empty {
+  display: none;
+}
+
+#downloads-button.done {
+  animation: download-done var(--duration-slow) var(--ease);
+}
+
+@keyframes download-done {
+  50% {
+    color: var(--success);
+    transform: scale(1.15);
+  }
 }
 
 #downloads-button.active .download-progress {

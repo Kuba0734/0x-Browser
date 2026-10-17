@@ -1,6 +1,6 @@
 import { api } from '../shared/client'
 import { icon, type IconName } from '../shared/icons'
-import { applySettings, type Settings } from '../shared/settings'
+import { applySettings, SEARCH_ENGINES, type Settings } from '../shared/settings'
 import { storeTarget, type StoreTarget } from '../shared/stores'
 import type {
   BookmarkNode,
@@ -8,6 +8,7 @@ import type {
   Completion,
   DownloadState,
   ExtensionInfo,
+  Suggestion,
   TabState,
   UpdateState
 } from '../shared/types'
@@ -26,6 +27,9 @@ const progress = byId('progress')
 const bookmarkBar = byId('bookmark-bar')
 const downloadsButton = byId<HTMLButtonElement>('downloads-button')
 const downloadProgress = downloadsButton.querySelector('.download-progress > span') as HTMLElement
+const downloadLabel = downloadsButton.querySelector('.download-label') as HTMLElement
+const seenFinished = new Set<string>()
+let downloadsInitialized = false
 const extensionActions = byId('extension-actions')
 const extensionsButton = byId<HTMLButtonElement>('extensions-button')
 const updateButton = byId<HTMLButtonElement>('update-button')
@@ -69,20 +73,19 @@ function createTabEl(id: number): HTMLElement {
   el.className = 'tab'
   el.setAttribute('role', 'tab')
   el.innerHTML = `<span class="tab-icon"><span class="tab-glyph"></span><img alt="" hidden><span class="spinner"></span></span><span class="tab-title"></span><button class="tab-close" title="Close tab" aria-label="Close tab">${icon('close')}</button>`
-  el.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return
-    api.tabs.activate(id)
-    startDrag(id, el, event)
+  el.draggable = true
+  el.addEventListener('mousedown', (event) => {
+    if (event.button === 0) api.tabs.activate(id)
   })
-  el.addEventListener('pointermove', moveDrag)
-  el.addEventListener('pointerup', endDrag)
-  el.addEventListener('pointercancel', endDrag)
+  el.addEventListener('dragstart', (event) => startTabDrag(id, el, event))
+  el.addEventListener('dragend', endTabDrag)
   el.addEventListener('animationend', () => el.classList.add('settled'), { once: true })
   el.addEventListener('auxclick', (event) => {
     if (event.button === 1) closeTab(id)
   })
   const close = el.querySelector('.tab-close') as HTMLButtonElement
-  close.addEventListener('pointerdown', (event) => event.stopPropagation())
+  close.addEventListener('mousedown', (event) => event.stopPropagation())
+  close.draggable = false
   close.addEventListener('click', () => closeTab(id))
   const img = el.querySelector('img') as HTMLImageElement
   img.addEventListener('error', () => {
@@ -125,7 +128,7 @@ function flipTabs(change: () => void): void {
   const easing = style.getPropertyValue('--ease').trim()
   for (const [id, el] of tabEls) {
     const left = before.get(id)
-    if (left === undefined || el === dragging?.el) continue
+    if (left === undefined) continue
     const dx = left - el.getBoundingClientRect().left
     if (Math.abs(dx) < 1) continue
     el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration, easing })
@@ -177,103 +180,88 @@ function renderTabs(): void {
       }
       updateTabEl(el, tab)
     }
-    if (dragging) return
+    if (draggedTab) return
     const ordered = state.tabs.map((tab) => tabEls.get(tab.id)!)
     const current = [...tabsEl.querySelectorAll('.tab:not(.leaving)')]
     if (ordered.some((el, index) => current[index] !== el)) tabsEl.append(...ordered)
   })
 }
 
-type Drag = {
-  id: number
-  el: HTMLElement
-  startX: number
-  startY: number
-  grab: number
-  shift: number
-  active: boolean
-}
-
-const DRAG_THRESHOLD = 5
-const DETACH_DISTANCE = 40
-let dragging: Drag | null = null
+// Native drag and drop keeps working outside the window and across windows, unlike pointer events.
+const TAB_MIME = 'application/x-0x-tab'
+let draggedTab: { id: number; el: HTMLElement; dropped: boolean } | null = null
+const dropMarker = document.createElement('div')
+dropMarker.className = 'drop-marker'
 
 const visibleTabs = () => [...tabsEl.querySelectorAll<HTMLElement>('.tab:not(.leaving)')]
+const middle = (el: HTMLElement) => el.getBoundingClientRect().left + el.offsetWidth / 2
 
-function startDrag(id: number, el: HTMLElement, event: PointerEvent): void {
-  const left = el.getBoundingClientRect().left
-  dragging = {
-    id,
-    el,
-    startX: event.clientX,
-    startY: event.clientY,
-    grab: event.clientX - left,
-    shift: 0,
-    active: false
-  }
-  el.setPointerCapture(event.pointerId)
+function dropIndex(clientX: number, tabs = visibleTabs()): number {
+  return tabs.filter((el) => middle(el) < clientX).length
 }
 
-function isOutsideStrip(event: PointerEvent): boolean {
-  const strip = tabsEl.getBoundingClientRect()
-  return (
-    event.clientY > strip.bottom + DETACH_DISTANCE ||
-    event.clientY < -DETACH_DISTANCE ||
-    event.clientX < -DETACH_DISTANCE ||
-    event.clientX > innerWidth + DETACH_DISTANCE
-  )
+function startTabDrag(id: number, el: HTMLElement, event: DragEvent): void {
+  if (!event.dataTransfer) return
+  draggedTab = { id, el, dropped: false }
+  event.dataTransfer.setData(TAB_MIME, String(id))
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setDragImage(el, event.offsetX, event.offsetY)
+  requestAnimationFrame(() => el.classList.add('dragging'))
 }
 
-function placeDragged(drag: Drag, clientX: number): void {
-  const layoutLeft = drag.el.getBoundingClientRect().left - drag.shift
-  drag.shift = clientX - drag.grab - layoutLeft
-  drag.el.style.transform = `translateX(${drag.shift}px)`
+function endTabDrag(event: DragEvent): void {
+  const drag = draggedTab
+  draggedTab = null
+  if (!drag) return
+  drag.el.classList.remove('dragging')
+  if (!drag.dropped && event.dataTransfer?.dropEffect === 'none') api.tabs.detach(drag.id)
+  renderTabs()
 }
 
-function moveDrag(event: PointerEvent): void {
-  const drag = dragging
-  if (!drag || drag.el !== event.currentTarget) return
-  if (!drag.active) {
-    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY)
-    if (distance < DRAG_THRESHOLD) return
-    drag.active = true
-    drag.el.classList.add('dragging')
-  }
-  placeDragged(drag, event.clientX)
-  drag.el.classList.toggle('detaching', isOutsideStrip(event) && state.tabs.length > 1)
-  const tabs = visibleTabs()
-  const index = tabs.indexOf(drag.el)
-  const center = drag.el.getBoundingClientRect().left + drag.el.offsetWidth / 2
-  const next = tabs[index + 1]
-  const previous = tabs[index - 1]
-  const middle = (el: HTMLElement) => el.getBoundingClientRect().left + el.offsetWidth / 2
-  let target: (() => void) | null = null
-  if (next && center > middle(next)) target = () => next.after(drag.el)
-  else if (previous && center < middle(previous)) target = () => previous.before(drag.el)
-  if (!target) return
-  flipTabs(target)
-  placeDragged(drag, event.clientX)
-}
-
-function endDrag(event: PointerEvent): void {
-  const drag = dragging
-  if (!drag || drag.el !== event.currentTarget) return
-  dragging = null
-  const { el, shift } = drag
-  el.classList.remove('dragging', 'detaching')
-  el.style.transform = ''
-  if (!drag.active) return
-  if (event.type === 'pointerup' && isOutsideStrip(event) && state.tabs.length > 1) {
-    api.tabs.detach(drag.id, event.screenX, event.screenY)
-    return
-  }
-  const style = getComputedStyle(document.documentElement)
-  el.animate([{ transform: `translateX(${shift}px)` }, { transform: 'none' }], {
-    duration: parseFloat(style.getPropertyValue('--duration-base')) || 0,
-    easing: style.getPropertyValue('--ease').trim()
+function reorderDragged(clientX: number): void {
+  const drag = draggedTab!
+  const others = visibleTabs().filter((el) => el !== drag.el)
+  const index = dropIndex(clientX, others)
+  if (visibleTabs().indexOf(drag.el) === index) return
+  flipTabs(() => {
+    const reference = others[index]
+    if (reference) reference.before(drag.el)
+    else others.at(-1)?.after(drag.el)
   })
-  api.tabs.move(drag.id, visibleTabs().indexOf(el))
 }
+
+function showDropMarker(clientX: number): void {
+  const tabs = visibleTabs()
+  const index = dropIndex(clientX, tabs)
+  const strip = tabsEl.getBoundingClientRect()
+  const edge =
+    tabs[index]?.getBoundingClientRect().left ?? tabs.at(-1)?.getBoundingClientRect().right
+  dropMarker.style.transform = `translateX(${(edge ?? strip.left) - strip.left - 1}px)`
+  if (!dropMarker.isConnected) tabsEl.append(dropMarker)
+}
+
+tabsEl.addEventListener('dragover', (event) => {
+  if (!event.dataTransfer?.types.includes(TAB_MIME)) return
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'move'
+  if (draggedTab) reorderDragged(event.clientX)
+  else showDropMarker(event.clientX)
+})
+
+tabsEl.addEventListener('dragleave', (event) => {
+  if (!tabsEl.contains(event.relatedTarget as Node | null)) dropMarker.remove()
+})
+
+tabsEl.addEventListener('drop', (event) => {
+  const id = Number(event.dataTransfer?.getData(TAB_MIME))
+  dropMarker.remove()
+  if (!Number.isInteger(id) || id <= 0) return
+  event.preventDefault()
+  if (draggedTab) {
+    draggedTab.dropped = true
+    api.tabs.move(id, visibleTabs().indexOf(draggedTab.el))
+  } else api.tabs.attach(id, dropIndex(event.clientX))
+})
 
 function renderStar(): void {
   const tab = activeTab()
@@ -396,8 +384,26 @@ function applyDownloads(list: DownloadState[]): void {
   downloadsButton.hidden = !recent && active.length === 0
   const total = active.reduce((sum, item) => sum + item.totalBytes, 0)
   const received = active.reduce((sum, item) => sum + item.receivedBytes, 0)
-  downloadsButton.classList.toggle('active', active.length > 0)
-  downloadProgress.style.transform = `scaleX(${total ? received / total : active.length ? 0.1 : 1})`
+  const busy = active.length > 0
+  const percent = total ? Math.floor((received / total) * 100) : 0
+  downloadsButton.classList.toggle('active', busy)
+  downloadProgress.style.transform = `scaleX(${total ? received / total : busy ? 0.1 : 1})`
+  downloadLabel.textContent = busy
+    ? `${active.length > 1 ? `${active.length} · ` : ''}${percent} %`
+    : ''
+  const speed = active.reduce((sum, item) => sum + item.speed, 0)
+  const names = active.map((item) => item.filename).join(', ')
+  downloadsButton.title = busy
+    ? `${names}${speed ? ` · ${(speed / 1048576).toFixed(1)} MB/s` : ''}`
+    : 'Downloads'
+  const finished = list.some((item) => item.state === 'completed' && !seenFinished.has(item.id))
+  for (const item of list) if (item.state === 'completed') seenFinished.add(item.id)
+  if (finished && downloadsInitialized) {
+    downloadsButton.classList.remove('done')
+    void downloadsButton.offsetWidth
+    downloadsButton.classList.add('done')
+  }
+  downloadsInitialized = true
 }
 
 function applyExtensions(list: ExtensionInfo[]): void {
@@ -428,7 +434,10 @@ function applyExtensions(list: ExtensionInfo[]): void {
   )
 }
 
+let currentSettings: Settings | null = null
+
 function applyUiSettings(settings: Settings): void {
+  currentSettings = settings
   applySettings(settings)
   showBar = settings.showBookmarkBar
   renderBookmarkBar()
@@ -452,6 +461,7 @@ function applyUpdate(update: UpdateState): void {
 api.tabs.onState((next) => {
   const activeChanged = next.activeId !== state.activeId
   state = next
+  if (activeChanged) hideSuggestions()
   renderTabs()
   renderToolbar(activeChanged)
 })
@@ -487,8 +497,78 @@ address.addEventListener('mousedown', (event) => {
   address.select()
 })
 
+const looksLikeAddress = (text: string) =>
+  /^(https?|0x|ox):\/\//i.test(text) ||
+  /^[^\s/]+\.[a-z]{2,}(\/\S*)?$/i.test(text) ||
+  /^localhost(:\d+)?/i.test(text)
+
+let suggestions: Suggestion[] = []
+let selectedSuggestion = -1
+let typedText = ''
+let suggestRequest = 0
+
+function showSuggestions(): void {
+  if (!suggestions.length || document.activeElement !== address) return hideSuggestions()
+  const rect = address.getBoundingClientRect()
+  api.ui.showSuggestions(
+    suggestions,
+    selectedSuggestion,
+    rect.left - 4,
+    rect.bottom + 4,
+    rect.width + 8
+  )
+}
+
+function hideSuggestions(): void {
+  suggestRequest++
+  if (!suggestions.length) return
+  suggestions = []
+  selectedSuggestion = -1
+  api.ui.hideSuggestions()
+}
+
+async function updateSuggestions(typed: string): Promise<void> {
+  const request = ++suggestRequest
+  const text = typed.trim()
+  if (!text) return hideSuggestions()
+  const [history, search] = await Promise.all([api.history.search(text), api.search.suggest(text)])
+  if (request !== suggestRequest) return
+  const engine = SEARCH_ENGINES[currentSettings?.searchEngine ?? 'google'].name
+  const isAddress = looksLikeAddress(text)
+  const items: Suggestion[] = [
+    {
+      kind: isAddress ? 'go' : 'search',
+      label: text,
+      detail: isAddress ? 'Open' : `Search with ${engine}`,
+      input: text,
+      favicon: ''
+    },
+    ...history.slice(0, 3).map((entry): Suggestion => ({
+      kind: 'history',
+      label: entry.title || displayUrl(entry.url),
+      detail: displayUrl(entry.url),
+      input: entry.url,
+      favicon: faviconFor(entry.url)
+    })),
+    ...search
+      .filter((term) => term.toLowerCase() !== text.toLowerCase())
+      .map((term): Suggestion => ({
+        kind: 'search',
+        label: term,
+        detail: '',
+        input: term,
+        favicon: ''
+      }))
+  ]
+  suggestions = items.slice(0, 8)
+  selectedSuggestion = -1
+  typedText = typed
+  showSuggestions()
+}
+
 address.addEventListener('input', async (event) => {
   completion = null
+  updateSuggestions(address.value)
   const inputEvent = event as InputEvent
   if (inputEvent.isComposing || inputEvent.inputType.startsWith('delete')) return
   const typed = address.value
@@ -505,7 +585,22 @@ address.addEventListener('input', async (event) => {
 })
 
 address.addEventListener('keydown', (event) => {
+  if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && suggestions.length) {
+    event.preventDefault()
+    const step = event.key === 'ArrowDown' ? 1 : -1
+    const count = suggestions.length
+    selectedSuggestion = ((selectedSuggestion + 1 + step + count + 1) % (count + 1)) - 1
+    completion = null
+    address.value = selectedSuggestion < 0 ? typedText : suggestions[selectedSuggestion].input
+    showSuggestions()
+    return
+  }
   if (event.key !== 'Escape') return
+  if (suggestions.length) {
+    address.value = typedText
+    hideSuggestions()
+    return
+  }
   address.value = displayUrl(activeTab()?.url ?? '')
   completion = null
   address.select()
@@ -513,10 +608,16 @@ address.addEventListener('keydown', (event) => {
 
 addressForm.addEventListener('submit', (event) => {
   event.preventDefault()
-  const input = completion?.shown === address.value ? completion.url : address.value
+  const picked = suggestions[selectedSuggestion]
+  const input = picked
+    ? picked.input
+    : completion?.shown === address.value
+      ? completion.url
+      : address.value
   if (!input.trim()) return
   api.nav.go(input)
   completion = null
+  hideSuggestions()
   address.blur()
 })
 
@@ -564,3 +665,13 @@ byId('menu-button').addEventListener('click', (event) => {
 
 reportChromeHeight()
 new ResizeObserver(reportChromeHeight).observe(chrome)
+
+address.addEventListener('blur', () => setTimeout(hideSuggestions, 150))
+api.ui.onSuggestionPicked((index) => {
+  const item = suggestions[index]
+  if (!item) return
+  api.nav.go(item.input)
+  completion = null
+  hideSuggestions()
+  address.blur()
+})

@@ -9,6 +9,7 @@ import type {
   AppInfo,
   ImportSource,
   PerfSnapshot,
+  Suggestion,
   TopSite,
   UpdateState
 } from './types'
@@ -42,8 +43,8 @@ export const api = {
     close: (id: number) => send('tabs:close', id),
     activate: (id: number) => send('tabs:activate', id),
     move: (id: number, index: number) => send('tabs:move', id, index),
-    detach: (id: number, screenX: number, screenY: number) =>
-      send('tabs:detach', id, Math.round(screenX), Math.round(screenY)),
+    detach: (id: number) => send('tabs:detach', id),
+    attach: (id: number, index: number) => send('tabs:attach', id, index),
     openInternal: (page: InternalPage) => send('tabs:open-internal', page),
     onState: on<BrowserState>('tabs:state')
   },
@@ -61,11 +62,19 @@ export const api = {
     bookmarkContext: (id: string, x: number, y: number) => send('ui:bookmark-context', id, x, y),
     extensionPopup: (id: string, x: number, y: number) => send('ui:extension-popup', id, x, y),
     extensionsMenu: (x: number, y: number) => send('ui:extensions-menu', x, y),
-    onFocusAddress: on<void>('ui:focus-address')
+    onFocusAddress: on<void>('ui:focus-address'),
+    showSuggestions: (items: Suggestion[], selected: number, x: number, y: number, width: number) =>
+      send('suggest:show', items, selected, x, y, width),
+    hideSuggestions: () => send('suggest:hide'),
+    onSuggestionPicked: on<number>('suggest:picked')
   },
   history: {
     complete: (text: string) => invoke<Completion | null>('history:complete', text),
-    top: () => invoke<TopSite[]>('history:top')
+    top: () => invoke<TopSite[]>('history:top'),
+    search: (text: string) => invoke<TopSite[]>('history:search', text)
+  },
+  search: {
+    suggest: (text: string) => invoke<string[]>('search:suggest', text)
   },
   favicons: {
     all: () => invoke<Record<string, string>>('favicons:all'),

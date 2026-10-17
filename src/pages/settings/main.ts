@@ -5,6 +5,8 @@ import {
   type SearchEngine,
   type Settings
 } from '../../shared/settings'
+import type { InternalPage } from '../../shared/client'
+import type { IconName } from '../../shared/icons'
 import type { ImportSource, UpdateState } from '../../shared/types'
 import { api, errorMessage, h, initPage, reveal, toast } from '../shared/kit'
 import './settings.css'
@@ -37,7 +39,12 @@ function setting(label: string, description: string, control: HTMLElement): HTML
 }
 
 function toggle(
-  key: 'showBookmarkBar' | 'reducedMotion' | 'askDownloadLocation' | 'forceDarkWeb'
+  key:
+    | 'showBookmarkBar'
+    | 'reducedMotion'
+    | 'askDownloadLocation'
+    | 'forceDarkWeb'
+    | 'searchSuggestions'
 ): HTMLInputElement {
   const input = h('input', {
     class: 'switch',
@@ -107,21 +114,25 @@ function tokenControl(token: DesignToken): HTMLElement {
 
 function appearance(): HTMLElement[] {
   const groups = [...new Set(DESIGN_TOKENS.map((token) => token.group))]
-  return groups.flatMap((group) => [
-    h('h3', { class: 'token-group', text: group }),
+  return groups.map((group) =>
     h(
       'div',
-      { class: 'card' },
-      ...DESIGN_TOKENS.filter((token) => token.group === group).map((token) =>
-        h(
-          'div',
-          { class: 'row setting' },
-          h('div', { class: 'row-main', text: token.label }),
-          tokenControl(token)
+      { class: 'settings-group' },
+      h('h3', { class: 'token-group', text: group }),
+      h(
+        'div',
+        { class: 'card' },
+        ...DESIGN_TOKENS.filter((token) => token.group === group).map((token) =>
+          h(
+            'div',
+            { class: 'row setting' },
+            h('div', { class: 'row-main', text: token.label }),
+            tokenControl(token)
+          )
         )
       )
     )
-  ])
+  )
 }
 
 function downloadFolder(): HTMLElement {
@@ -264,64 +275,119 @@ function about(): HTMLElement {
 
 const importHost = h('div', {}, h('div', { class: 'skeleton' }))
 
+const LINKS: [InternalPage, string, IconName][] = [
+  ['bookmarks', 'Bookmarks', 'bookmarks'],
+  ['downloads', 'Downloads', 'download'],
+  ['extensions', 'Extensions', 'extensions'],
+  ['performance', 'Performance', 'performance']
+]
+
+const searchInput = h('input', {
+  class: 'input settings-search-input',
+  type: 'search',
+  placeholder: 'Search settings',
+  spellcheck: false,
+  'aria-label': 'Search settings'
+})
+const noResults = h(
+  'div',
+  { class: 'card empty', hidden: true },
+  h('span', { icon: 'search' }),
+  h('p', { text: 'No settings match your search' })
+)
+const section = (...children: HTMLElement[]) =>
+  h('section', { class: 'settings-section' }, ...children)
+
+function filterSettings(): void {
+  const query = searchInput.value.trim().toLowerCase()
+  for (const row of page.querySelectorAll<HTMLElement>('.row.setting'))
+    row.hidden = !!query && !(row.textContent ?? '').toLowerCase().includes(query)
+  for (const container of page.querySelectorAll<HTMLElement>('.settings-group, .settings-section'))
+    container.hidden = !!query && !container.querySelector('.row.setting:not([hidden])')
+  noResults.hidden = !query || !!page.querySelector('.row.setting:not([hidden])')
+}
+
+searchInput.addEventListener('input', filterSettings)
+
 page.append(
   h(
     'header',
     { class: 'page-header' },
-    h('h1', { class: 'page-title' }, h('span', { icon: 'settings' }), 'Settings')
-  ),
-  h('h2', { class: 'section-title', text: 'Behavior' }),
-  h(
-    'div',
-    { class: 'card' },
-    setting(
-      'Search engine',
-      'Used for searches from the address bar',
-      select(
-        Object.entries(SEARCH_ENGINES).map(([id, engine]) => [id, engine.name]),
-        (settings) => settings.searchEngine,
-        (value) => api.settings.set('searchEngine', value as SearchEngine)
+    h('h1', { class: 'page-title' }, h('span', { icon: 'settings' }), 'Settings'),
+    h(
+      'nav',
+      { class: 'actions', 'aria-label': 'Browser pages' },
+      ...LINKS.map(([target, text, iconName]) =>
+        h('button', {
+          class: 'btn',
+          icon: iconName,
+          text,
+          onclick: () => api.tabs.openInternal(target)
+        })
       )
-    ),
-    setting('Show bookmarks bar', 'Appears once you have bookmarks', toggle('showBookmarkBar')),
-    setting(
-      'Dark mode for websites',
-      'Makes light websites like Google dark. Applies after a restart.',
-      darkMode()
-    ),
-    setting('Reduce animations', 'Turns off nearly all motion', toggle('reducedMotion')),
-    setting(
-      'Sleep inactive tabs',
-      'Frees memory from tabs you have not used for a while',
-      select(
-        SLEEP_OPTIONS,
-        (settings) => settings.sleepAfterMinutes,
-        (value) => api.settings.set('sleepAfterMinutes', Number(value))
-      )
-    ),
-    setting(
-      'Ask where to save downloads',
-      'Otherwise files go to the download folder',
-      toggle('askDownloadLocation')
-    ),
-    setting('Download folder', '', downloadFolder())
+    )
   ),
-  h('h2', { class: 'section-title', id: 'import', text: 'Import data' }),
-  importHost,
-  h(
-    'div',
-    { class: 'appearance-header' },
-    h('h2', { class: 'section-title', text: 'Appearance' }),
-    h('button', {
-      class: 'btn',
-      icon: 'reload',
-      text: 'Reset all',
-      onclick: () => api.settings.resetDesign()
-    })
+  h('label', { class: 'settings-search' }, h('span', { icon: 'search' }), searchInput),
+  noResults,
+  section(
+    h('h2', { class: 'section-title', text: 'Behavior' }),
+    h(
+      'div',
+      { class: 'card' },
+      setting(
+        'Search engine',
+        'Used for searches from the address bar',
+        select(
+          Object.entries(SEARCH_ENGINES).map(([id, engine]) => [id, engine.name]),
+          (settings) => settings.searchEngine,
+          (value) => api.settings.set('searchEngine', value as SearchEngine)
+        )
+      ),
+      setting(
+        'Search suggestions',
+        'Shows suggestions while you type. What you type is sent to your search engine.',
+        toggle('searchSuggestions')
+      ),
+      setting('Show bookmarks bar', 'Appears once you have bookmarks', toggle('showBookmarkBar')),
+      setting(
+        'Dark mode for websites',
+        'Makes light websites like Google dark. Applies after a restart.',
+        darkMode()
+      ),
+      setting('Reduce animations', 'Turns off nearly all motion', toggle('reducedMotion')),
+      setting(
+        'Sleep inactive tabs',
+        'Frees memory from tabs you have not used for a while',
+        select(
+          SLEEP_OPTIONS,
+          (settings) => settings.sleepAfterMinutes,
+          (value) => api.settings.set('sleepAfterMinutes', Number(value))
+        )
+      ),
+      setting(
+        'Ask where to save downloads',
+        'Otherwise files go to the download folder',
+        toggle('askDownloadLocation')
+      ),
+      setting('Download folder', 'Where downloaded files are saved', downloadFolder())
+    )
   ),
-  ...appearance(),
-  h('h2', { class: 'section-title', text: 'About & updates' }),
-  about()
+  section(h('h2', { class: 'section-title', id: 'import', text: 'Import data' }), importHost),
+  section(
+    h(
+      'div',
+      { class: 'appearance-header' },
+      h('h2', { class: 'section-title', text: 'Appearance' }),
+      h('button', {
+        class: 'btn',
+        icon: 'reload',
+        text: 'Reset all',
+        onclick: () => api.settings.resetDesign()
+      })
+    ),
+    ...appearance()
+  ),
+  section(h('h2', { class: 'section-title', text: 'About & updates' }), about())
 )
 
 initPage()
@@ -333,4 +399,5 @@ api.settings.onChange(apply)
 api.importer.sources().then((sources) => {
   importHost.replaceChildren(importer(sources))
   reveal(importHost.querySelectorAll('.row'))
+  filterSettings()
 })
