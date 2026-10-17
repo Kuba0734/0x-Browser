@@ -18,6 +18,8 @@ type Tab = {
   sleepTimer?: NodeJS.Timeout
 }
 
+const DEFAULT_CHROME_HEIGHT = 84
+
 const backgroundFor = (url: string) => (isInternalUrl(url) ? '#0a0a0b' : '#ffffff')
 
 type InputHandler = (event: Event, input: Input) => void
@@ -29,7 +31,7 @@ export class TabManager {
   private readonly onInput: InputHandler
   private activeId = -1
   private nextId = 1
-  private chromeHeight = 0
+  private chromeHeight = DEFAULT_CHROME_HEIGHT
 
   constructor(win: BrowserWindow, onChange: (state: BrowserState) => void, onInput: InputHandler) {
     this.win = win

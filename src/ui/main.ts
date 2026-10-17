@@ -153,8 +153,19 @@ function collectUrls(node: BookmarkNode, urls: Set<string>): Set<string> {
   return urls
 }
 
+let reportedHeight = -1
+
+// The tab view covers the UI until it knows the chrome height, and a covered UI does not render,
+// so ResizeObserver alone never fires at startup. Measure synchronously instead.
+function reportChromeHeight(): void {
+  const height = chrome.offsetHeight
+  if (height === reportedHeight) return
+  reportedHeight = height
+  api.ui.setChromeHeight(height)
+}
+
 function renderBookmarkBar(): void {
-  bookmarkBar.hidden = !showBar
+  bookmarkBar.hidden = !showBar || barNodes.length === 0
   bookmarkBar.replaceChildren(
     ...barNodes.map((node) => {
       const item = document.createElement('button')
@@ -181,12 +192,7 @@ function renderBookmarkBar(): void {
       return item
     })
   )
-  if (showBar && barNodes.length === 0) {
-    const empty = document.createElement('span')
-    empty.className = 'bookmark-empty'
-    empty.textContent = 'Bookmarks you star appear here'
-    bookmarkBar.append(empty)
-  }
+  reportChromeHeight()
 }
 
 function applyBookmarks(tree: BookmarkNode): void {
@@ -323,4 +329,5 @@ byId('menu-button').addEventListener('click', (event) => {
   api.ui.menu(rect.left, rect.bottom + 4)
 })
 
-new ResizeObserver(() => api.ui.setChromeHeight(chrome.offsetHeight)).observe(chrome)
+reportChromeHeight()
+new ResizeObserver(reportChromeHeight).observe(chrome)

@@ -283,7 +283,7 @@ page.append(
         (value) => api.settings.set('searchEngine', value as SearchEngine)
       )
     ),
-    setting('Show bookmarks bar', 'Below the address bar', toggle('showBookmarkBar')),
+    setting('Show bookmarks bar', 'Appears once you have bookmarks', toggle('showBookmarkBar')),
     setting(
       'Dark mode for websites',
       'Makes light websites like Google dark. Applies after a restart.',
