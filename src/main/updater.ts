@@ -35,7 +35,9 @@ export function initUpdater(): void {
   autoUpdater.on('update-available', (info) =>
     set({ status: 'downloading', version: info.version, progress: 0 })
   )
-  autoUpdater.on('download-progress', (progress) => set({ progress: progress.percent }))
+  autoUpdater.on('download-progress', ({ percent }) => {
+    if (Math.floor(percent) !== Math.floor(state.progress)) set({ progress: percent })
+  })
   autoUpdater.on('update-downloaded', (info) => set({ status: 'ready', version: info.version }))
   autoUpdater.on('error', (error) => {
     log('error', 'updater', `Update failed: ${error.name}`)

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, nativeTheme, session } from 'electron'
+import { app, BrowserWindow, dialog, nativeTheme, session, type WebContents } from 'electron'
 import {
   DEFAULT_SETTINGS,
   DESIGN_TOKENS,
@@ -37,15 +37,24 @@ import {
   loadExtensions,
   openExtensionPopup,
   removeExtension,
-  setExtensionEnabled
+  setExtensionEnabled,
+  setExtensionPinned
 } from './extensions'
+import { appActions } from './app-actions'
 import { initCompat } from './compat'
+import { allFavicons, flushFavicons, loadFavicons } from './favicons'
 import { closeHistory, completeHistory, openHistory, topSites } from './history'
 import { importSources, runImport } from './importer'
 import { registerInternalProtocol, rendererUrl } from './internal'
-import { bool, handle, int, listen, optStr, setUi, str } from './ipc'
+import { addUi, bool, handle, int, listen, optStr, str } from './ipc'
 import { log } from './logger'
-import { popupAppMenu, popupBookmarkContext, popupBookmarkFolder } from './menus'
+import {
+  popupAppMenu,
+  popupBookmarkContext,
+  popupBookmarkFolder,
+  popupExtensionsMenu,
+  popupPageMenu
+} from './menus'
 import { perfSnapshot } from './performance'
 import {
   flushSettings,
@@ -55,7 +64,8 @@ import {
   updateSettings
 } from './settings'
 import { handleShortcut } from './shortcuts'
-import { TabManager } from './tabs'
+import { createSaver, readJson } from './store'
+import { TabManager, type SavedWindow, type Tab } from './tabs'
 import { checkForUpdates, initUpdater, installUpdate, updateState } from './updater'
 import { internalUrl, isInternalUrl, isWebUrl, resolveInput } from './url'
 
@@ -109,10 +119,63 @@ function createSplash(): BrowserWindow {
   return splash
 }
 
-function createWindow(): Promise<BrowserWindow> {
+type AppWindow = { win: BrowserWindow; tabs: TabManager }
+
+const SESSION_FILE = 'session.json'
+const windows = new Set<AppWindow>()
+let sessionFrozen = false
+const sessionSaver = createSaver(SESSION_FILE, () => ({
+  windows: [...windows].map((entry) => entry.tabs.snapshot())
+}))
+
+function saveSession(): void {
+  if (!sessionFrozen) sessionSaver.schedule()
+}
+
+function saveSessionNow(): void {
+  if (sessionFrozen) return
+  sessionSaver.schedule()
+  sessionSaver.flush()
+}
+
+const validWindow = (saved: Partial<SavedWindow> | undefined): SavedWindow => ({
+  tabs: (Array.isArray(saved?.tabs) ? saved.tabs : []).filter(
+    (tab) => typeof tab?.url === 'string' && typeof tab.title === 'string' && navigable(tab.url)
+  ),
+  activeIndex: Number.isInteger(saved?.activeIndex) ? Number(saved?.activeIndex) : 0
+})
+
+function loadSession(): SavedWindow[] {
+  const saved = readJson<{ windows?: Partial<SavedWindow>[] } & Partial<SavedWindow>>(
+    SESSION_FILE,
+    {}
+  )
+  const list = Array.isArray(saved.windows) ? saved.windows : [saved]
+  return list.map(validWindow).filter((entry) => entry.tabs.length)
+}
+
+function windowFor(sender: WebContents): AppWindow {
+  for (const entry of windows)
+    if (entry.win.webContents === sender || entry.tabs.owns(sender)) return entry
+  const focused = BrowserWindow.getFocusedWindow()
+  const fallback = [...windows].find((entry) => entry.win === focused) ?? [...windows][0]
+  if (!fallback) throw new TypeError('No window')
+  return fallback
+}
+
+function windowForTab(id: number): AppWindow | undefined {
+  return [...windows].find((entry) => entry.tabs.has(id))
+}
+
+type WindowOptions = { saved?: SavedWindow; tab?: Tab; url?: string; x?: number; y?: number }
+
+function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
+  const source = BrowserWindow.getFocusedWindow()?.getBounds()
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: source?.width ?? 1280,
+    height: source?.height ?? 800,
+    x: options.x,
+    y: options.y,
     minWidth: 480,
     minHeight: 320,
     show: false,
@@ -129,103 +192,145 @@ function createWindow(): Promise<BrowserWindow> {
     }
   })
   const ui = win.webContents
-  setUi(ui)
-  const tabs: TabManager = new TabManager(
-    win,
-    (state) => ui.send('tabs:state', state),
-    (event, input) => handleShortcut(tabs, ui, event, input)
-  )
+  addUi(ui)
+  const tabs: TabManager = new TabManager(win, {
+    onChange: (state) => {
+      if (!ui.isDestroyed()) ui.send('tabs:state', state)
+      saveSession()
+    },
+    onInput: (event, input) => handleShortcut(tabs, ui, event, input),
+    canCloseWindow: () => windows.size > 1,
+    onContextMenu: (contents, params) => popupPageMenu(win, tabs, contents, params)
+  })
+  const entry: AppWindow = { win, tabs }
+  windows.add(entry)
 
   ui.on('will-navigate', (event) => event.preventDefault())
   ui.setWindowOpenHandler(() => ({ action: 'deny' }))
   ui.on('before-input-event', (event, input) => handleShortcut(tabs, ui, event, input))
-  let previousSleep = getSettings().sleepAfterMinutes
-  onSettingsChange((settings) => {
-    win.setTitleBarOverlay(titleBarOverlay())
-    win.setBackgroundColor(token('--bg'))
-    if (settings.sleepAfterMinutes !== previousSleep) tabs.rescheduleSleep()
-    previousSleep = settings.sleepAfterMinutes
+  win.on('close', () => {
+    if (windows.size === 1) {
+      saveSessionNow()
+      sessionFrozen = true
+    }
+  })
+  win.on('closed', () => {
+    windows.delete(entry)
+    tabs.destroyAll()
+    saveSession()
   })
 
-  registerIpc(win, tabs)
   ui.loadURL(rendererUrl('ui/index.html'))
   return new Promise((resolve) =>
     ui.once('did-finish-load', () => {
-      tabs.create()
-      resolve(win)
+      if (options.tab) tabs.adopt(options.tab)
+      else if (!options.saved || !tabs.restore(options.saved)) tabs.create(options.url)
+      win.show()
+      resolve(entry)
     })
   )
+}
+
+let previousSleep = getSettings().sleepAfterMinutes
+onSettingsChange((settings) => {
+  for (const { win, tabs } of windows) {
+    win.setTitleBarOverlay(titleBarOverlay())
+    win.setBackgroundColor(token('--bg'))
+    if (settings.sleepAfterMinutes !== previousSleep) tabs.rescheduleSleep()
+  }
+  previousSleep = settings.sleepAfterMinutes
+})
+
+appActions.newWindow = (url) => {
+  createWindow({ url })
 }
 
 const navigable = (url: string) => isWebUrl(url) || isInternalUrl(url)
 const coords = (x: unknown, y: unknown): [number, number] => [Number(x) || 0, Number(y) || 0]
 
-function registerIpc(win: BrowserWindow, tabs: TabManager): void {
-  listen('tabs:new', (url) => {
+function registerIpc(): void {
+  const tabsOf = (sender: WebContents) => windowFor(sender).tabs
+  const winOf = (sender: WebContents) => windowFor(sender).win
+
+  listen('tabs:new', (sender, url) => {
     const target = optStr(url)
-    tabs.create(target && navigable(target) ? target : undefined)
+    tabsOf(sender).create(target && navigable(target) ? target : undefined)
   })
-  listen('tabs:close', (id) => tabs.close(int(id)))
-  listen('tabs:activate', (id) => tabs.activate(int(id)))
-  listen('tabs:open-internal', (page) => {
+  listen('tabs:close', (sender, id) => tabsOf(sender).close(int(id)))
+  listen('tabs:activate', (sender, id) => tabsOf(sender).activate(int(id)))
+  listen('tabs:move', (sender, id, index) => tabsOf(sender).move(int(id), int(index)))
+  listen('tabs:detach', (sender, id, x, y) => {
+    const [screenX, screenY] = coords(x, y)
+    const tab = tabsOf(sender).detach(int(id))
+    if (tab) createWindow({ tab, x: Math.round(screenX - 120), y: Math.round(screenY - 20) })
+  })
+  listen('tabs:open-internal', (sender, page) => {
     const url = internalUrl(str(page))
-    if (url) tabs.openOrActivate(url)
+    if (url) tabsOf(sender).openOrActivate(url)
   })
 
-  listen('nav:go', (input) => {
+  listen('nav:go', (sender, input) => {
     const url = resolveInput(str(input), SEARCH_ENGINES[getSettings().searchEngine].url)
-    if (url) tabs.navigate(url)
+    if (url) tabsOf(sender).navigate(url)
   })
-  listen('nav:back', () => tabs.goBack())
-  listen('nav:forward', () => tabs.goForward())
-  listen('nav:reload', () => tabs.reload())
-  listen('nav:stop', () => tabs.stop())
+  listen('nav:back', (sender) => tabsOf(sender).goBack())
+  listen('nav:forward', (sender) => tabsOf(sender).goForward())
+  listen('nav:reload', (sender) => tabsOf(sender).reload())
+  listen('nav:stop', (sender) => tabsOf(sender).stop())
 
-  listen('ui:chrome-height', (height) => {
+  listen('ui:chrome-height', (sender, height) => {
     if (typeof height === 'number' && height >= 0 && height < 400)
-      tabs.setChromeHeight(Math.round(height))
+      tabsOf(sender).setChromeHeight(Math.round(height))
   })
-  listen('ui:menu', (x, y) => popupAppMenu(win, tabs, ...coords(x, y)))
-  listen('ui:bookmark-menu', (id, x, y) => popupBookmarkFolder(win, tabs, str(id), ...coords(x, y)))
-  listen('ui:bookmark-context', (id, x, y) =>
-    popupBookmarkContext(win, tabs, str(id), ...coords(x, y))
+  listen('ui:menu', (sender, x, y) => popupAppMenu(winOf(sender), tabsOf(sender), ...coords(x, y)))
+  listen('ui:bookmark-menu', (sender, id, x, y) =>
+    popupBookmarkFolder(winOf(sender), tabsOf(sender), str(id), ...coords(x, y))
   )
-  listen('ui:extension-popup', (id, x, y) => openExtensionPopup(win, str(id), ...coords(x, y)))
+  listen('ui:bookmark-context', (sender, id, x, y) =>
+    popupBookmarkContext(winOf(sender), tabsOf(sender), str(id), ...coords(x, y))
+  )
+  listen('ui:extension-popup', (sender, id, x, y) =>
+    openExtensionPopup(winOf(sender), str(id), ...coords(x, y))
+  )
+  listen('ui:extensions-menu', (sender, x, y) =>
+    popupExtensionsMenu(winOf(sender), tabsOf(sender), ...coords(x, y))
+  )
 
-  handle('history:complete', (text) => completeHistory(str(text)))
+  handle('history:complete', (_sender, text) => completeHistory(str(text)))
   handle('history:top', () => topSites())
+  handle('favicons:all', () => allFavicons())
 
   handle('bookmarks:tree', () => bookmarkTree())
-  handle('bookmarks:add', (parentId, title, url) => {
+  handle('bookmarks:add', (_sender, parentId, title, url) => {
     const target = optStr(url)
     if (target !== undefined && !navigable(target)) throw new TypeError('Invalid URL')
     return addBookmark(str(parentId), str(title), target)
   })
-  handle('bookmarks:update', (id, title, url) => {
+  handle('bookmarks:update', (_sender, id, title, url) => {
     const target = optStr(url)
     if (target !== undefined && !navigable(target)) throw new TypeError('Invalid URL')
     updateBookmark(str(id), str(title), target)
   })
-  handle('bookmarks:remove', (id) => removeBookmark(str(id)))
-  handle('bookmarks:move', (id, parentId) => moveBookmark(str(id), str(parentId)))
-  handle('bookmarks:toggle', (url, title) => {
+  handle('bookmarks:remove', (_sender, id) => removeBookmark(str(id)))
+  handle('bookmarks:move', (_sender, id, parentId) => moveBookmark(str(id), str(parentId)))
+  handle('bookmarks:toggle', (_sender, url, title) => {
     const target = str(url)
     if (!navigable(target)) throw new TypeError('Invalid URL')
     return toggleBookmark(target, str(title))
   })
 
   handle('downloads:list', () => listDownloads())
-  listen('downloads:pause', (id) => pauseDownload(str(id)))
-  listen('downloads:resume', (id) => resumeDownload(str(id)))
-  listen('downloads:cancel', (id) => cancelDownload(str(id)))
-  listen('downloads:open', (id) => openDownload(str(id)))
-  listen('downloads:show', (id) => showDownload(str(id)))
-  listen('downloads:remove', (id) => removeDownload(str(id)))
+  listen('downloads:pause', (_sender, id) => pauseDownload(str(id)))
+  listen('downloads:resume', (_sender, id) => resumeDownload(str(id)))
+  listen('downloads:cancel', (_sender, id) => cancelDownload(str(id)))
+  listen('downloads:open', (_sender, id) => openDownload(str(id)))
+  listen('downloads:show', (_sender, id) => showDownload(str(id)))
+  listen('downloads:remove', (_sender, id) => removeDownload(str(id)))
   listen('downloads:clear', () => clearDownloads())
   listen('downloads:open-folder', () => openDownloadFolder())
 
   handle('settings:get', () => getSettings())
-  listen('settings:set', (key, value) => {
+  listen('settings:set', (_sender, key, value) => {
     const name = str(key) as keyof Settings
     if (!(name in DEFAULT_SETTINGS) || name === 'design' || name === 'downloadDir') return
     if (typeof value !== typeof DEFAULT_SETTINGS[name]) return
@@ -236,7 +341,7 @@ function registerIpc(win: BrowserWindow, tabs: TabManager): void {
     }
     updateSettings({ [name]: value })
   })
-  listen('settings:set-token', (key, value) => {
+  listen('settings:set-token', (_sender, key, value) => {
     const name = str(key)
     if (!DESIGN_TOKENS.some((item) => item.key === name)) return
     const design = { ...getSettings().design }
@@ -247,8 +352,8 @@ function registerIpc(win: BrowserWindow, tabs: TabManager): void {
     updateSettings({ design })
   })
   listen('settings:reset-design', () => updateSettings({ design: {} }))
-  handle('settings:choose-download-dir', async () => {
-    const result = await dialog.showOpenDialog(win, {
+  handle('settings:choose-download-dir', async (sender) => {
+    const result = await dialog.showOpenDialog(winOf(sender), {
       title: 'Choose download folder',
       properties: ['openDirectory', 'createDirectory']
     })
@@ -257,19 +362,26 @@ function registerIpc(win: BrowserWindow, tabs: TabManager): void {
     return getSettings().downloadDir
   })
 
-  handle('perf:snapshot', () => perfSnapshot(tabs))
-  listen('perf:sleep', (id) => tabs.sleep(int(id)))
-  listen('perf:wake', (id) => tabs.wakeTab(int(id)))
-  listen('perf:sleep-inactive', () => tabs.sleepInactive())
+  handle('perf:snapshot', () => perfSnapshot([...windows].map((entry) => entry.tabs)))
+  listen('perf:sleep', (_sender, id) => windowForTab(int(id))?.tabs.sleep(int(id)))
+  listen('perf:wake', (_sender, id) => windowForTab(int(id))?.tabs.wakeTab(int(id)))
+  listen('perf:sleep-inactive', () => {
+    for (const entry of windows) entry.tabs.sleepInactive()
+  })
 
   handle('extensions:list', () => listExtensions())
-  handle('extensions:install-folder', () => installFromFolder(win))
-  handle('extensions:install-store', (input) => installFromStore(str(input)))
-  handle('extensions:set-enabled', (id, enabled) => setExtensionEnabled(str(id), bool(enabled)))
-  handle('extensions:remove', (id) => removeExtension(str(id)))
-  listen('extensions:options', (id) => {
+  handle('extensions:install-folder', (sender) => installFromFolder(winOf(sender)))
+  handle('extensions:install-store', (_sender, input) => installFromStore(str(input)))
+  handle('extensions:set-enabled', (_sender, id, enabled) =>
+    setExtensionEnabled(str(id), bool(enabled))
+  )
+  listen('extensions:set-pinned', (_sender, id, pinned) =>
+    setExtensionPinned(str(id), bool(pinned))
+  )
+  handle('extensions:remove', (_sender, id) => removeExtension(str(id)))
+  listen('extensions:options', (sender, id) => {
     const url = extensionOptionsUrl(str(id))
-    if (url) tabs.create(url)
+    if (url) tabsOf(sender).create(url)
   })
 
   handle('app:info', () => ({
@@ -286,7 +398,7 @@ function registerIpc(win: BrowserWindow, tabs: TabManager): void {
   listen('update:install', () => installUpdate())
 
   handle('import:sources', () => importSources())
-  handle('import:run', (sourceId, kinds) => {
+  handle('import:run', (_sender, sourceId, kinds) => {
     if (!Array.isArray(kinds)) throw new TypeError('Expected list')
     return runImport(str(sourceId), kinds.map(str))
   })
@@ -301,8 +413,10 @@ app.whenReady().then(async () => {
     ALLOWED_PERMISSIONS.has(permission)
   )
   registerInternalProtocol()
+  registerIpc()
   openHistory()
   loadBookmarks()
+  loadFavicons()
   loadDownloads()
   initDownloads(session.defaultSession)
   initCompat(session.defaultSession)
@@ -311,14 +425,22 @@ app.whenReady().then(async () => {
     filePath: join(__dirname, '../preload/service-worker.js')
   })
   await loadExtensions()
-  const win = await createWindow()
-  win.show()
+  const saved = loadSession()
+  await Promise.all(
+    (saved.length ? saved : [undefined]).map((entry) => createWindow({ saved: entry }))
+  )
   if (!splash.isDestroyed()) splash.destroy()
   initUpdater()
 })
 
+app.on('before-quit', () => {
+  saveSessionNow()
+  sessionFrozen = true
+})
 app.on('window-all-closed', () => app.quit())
 app.on('will-quit', () => {
   flushSettings()
+  sessionSaver.flush()
+  flushFavicons()
   closeHistory()
 })

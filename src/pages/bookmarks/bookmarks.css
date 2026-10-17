@@ -74,3 +74,9 @@
     position: static;
   }
 }
+
+.bm-icon img {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}

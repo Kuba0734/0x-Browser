@@ -74,13 +74,18 @@
         </button>
         <div id="extension-actions"></div>
         <button
-          id="update-button"
+          id="extensions-button"
           class="icon-btn"
-          data-icon="update"
-          title="Restart to update"
-          aria-label="Restart to update"
+          data-icon="extensions"
+          title="Extensions"
+          aria-label="Extensions"
           hidden
         ></button>
+        <button id="update-button" class="update-pill" aria-live="polite" hidden>
+          <span data-icon="update"></span>
+          <span class="update-label"></span>
+          <span class="update-progress"><span></span></span>
+        </button>
         <button
           id="downloads-button"
           class="icon-btn"

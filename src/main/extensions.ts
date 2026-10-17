@@ -11,7 +11,7 @@ import { broadcast } from './ipc'
 import { log } from './logger'
 import { dataPath, readJson, writeJson } from './store'
 
-type Installed = { id: string; dir: string; enabled: boolean }
+type Installed = { id: string; dir: string; enabled: boolean; pinned?: boolean }
 type Manifest = Record<string, unknown> & {
   name?: string
   version?: string
@@ -72,6 +72,7 @@ function info(entry: Installed): ExtensionInfo {
     version: manifest.version ?? '',
     description: localize(entry.dir, manifest, manifest.description),
     enabled: entry.enabled,
+    pinned: !!entry.pinned,
     icon: iconDataUrl(entry.dir, manifest.icons),
     hasPopup: !!(manifest.action?.default_popup ?? manifest.browser_action?.default_popup),
     optionsUrl: options ? `chrome-extension://${entry.id}/${options.replace(/^\//, '')}` : ''
@@ -177,6 +178,11 @@ function entry(id: string): Installed {
   const found = installed.find((item) => item.id === id)
   if (!found) throw new TypeError('Extension not found')
   return found
+}
+
+export function setExtensionPinned(id: string, pinned: boolean): void {
+  entry(id).pinned = pinned
+  save()
 }
 
 export async function setExtensionEnabled(id: string, enabled: boolean): Promise<void> {

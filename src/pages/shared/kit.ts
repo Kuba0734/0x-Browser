@@ -208,3 +208,14 @@ export function skeletons(count: number): HTMLElement[] {
 export function displayUrl(url: string): string {
   return url.startsWith('ox://') ? `0x://${url.slice(5).replace(/\/$/, '')}` : url
 }
+
+export async function loadFavicons(): Promise<(url?: string) => string> {
+  const favicons = await api.favicons.all()
+  return (url) => {
+    try {
+      return url ? (favicons[new URL(url).origin] ?? '') : ''
+    } catch {
+      return ''
+    }
+  }
+}

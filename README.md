@@ -18,6 +18,9 @@
 ## Features
 
 - **Tabs & navigation** – tabs, back/forward/reload, address bar with search and inline history completion
+- **Tabs that stay** – open tabs and windows are restored after a restart, inactive ones load on demand
+- **Drag tabs** – reorder tabs by dragging, drag a tab out of the tab strip to open it in a new window
+- **Context menu** – right-click for links, images, selected text, input fields and Inspect
 - **Home tab** – search, quick access to every browser page and your most visited sites
 - **Bookmarks** – star any page, folders, a bookmarks bar that appears once you have bookmarks
 - **Downloads** – live progress, pause, resume, cancel, open file or folder

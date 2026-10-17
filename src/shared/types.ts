@@ -66,6 +66,7 @@ export type ExtensionInfo = {
   version: string
   description: string
   enabled: boolean
+  pinned: boolean
   icon: string
   hasPopup: boolean
   optionsUrl: string

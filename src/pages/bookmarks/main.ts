@@ -6,6 +6,7 @@ import {
   errorMessage,
   h,
   initPage,
+  loadFavicons,
   modal,
   reveal,
   skeletons,
@@ -27,6 +28,7 @@ const heading = h('h2', { class: 'section-title bm-heading' })
 let tree: BookmarkNode = { id: 'root', title: '', children: [] }
 let currentId = 'bar'
 const seen = new Set<string>()
+let faviconFor: (url?: string) => string = () => ''
 
 function folders(node: BookmarkNode, depth = 0): [BookmarkNode, number][] {
   if (!node.children) return []
@@ -133,7 +135,9 @@ function row(node: BookmarkNode): HTMLElement {
   const el = h(
     'div',
     { class: 'row bm-row', ondblclick: open },
-    h('span', { class: 'bm-icon', icon: node.children ? 'folder' : 'globe' }),
+    faviconFor(node.url)
+      ? h('span', { class: 'bm-icon' }, h('img', { src: faviconFor(node.url), alt: '' }))
+      : h('span', { class: 'bm-icon', icon: node.children ? 'folder' : 'globe' }),
     h(
       'div',
       { class: 'row-main', onclick: open },
@@ -249,5 +253,8 @@ page.append(
 
 searchInput.addEventListener('input', renderList)
 initPage()
-api.bookmarks.tree().then(apply)
+Promise.all([api.bookmarks.tree(), loadFavicons()]).then(([next, lookup]) => {
+  faviconFor = lookup
+  apply(next)
+})
 api.bookmarks.onChange(apply)

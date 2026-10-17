@@ -1,13 +1,22 @@
 import { join } from 'node:path'
-import { WebContentsView, type BrowserWindow, type Event, type Input } from 'electron'
+import {
+  WebContentsView,
+  type BrowserWindow,
+  type Event,
+  type ContextMenuParams,
+  type Input,
+  type WebContents
+} from 'electron'
 import type { BrowserState, PerfTab } from '../shared/types'
 import { userAgentFor } from './compat'
+import { cachedFavicon, resolveFavicon } from './favicons'
 import { recordVisit, updateTitle } from './history'
 import { getSettings } from './settings'
 import { HOME_URL, isInternalUrl, isWebUrl } from './url'
 
-type Tab = {
+export type Tab = {
   id: number
+  owner: TabManager
   view: WebContentsView | null
   title: string
   url: string
@@ -19,25 +28,35 @@ type Tab = {
   sleepTimer?: NodeJS.Timeout
 }
 
+export type SavedWindow = { tabs: { url: string; title: string }[]; activeIndex: number }
+
+type InputHandler = (event: Event, input: Input) => void
+
+type Options = {
+  onChange: (state: BrowserState) => void
+  onInput: InputHandler
+  canCloseWindow: () => boolean
+  onContextMenu: (contents: WebContents, params: ContextMenuParams) => void
+}
+
 const DEFAULT_CHROME_HEIGHT = 84
+
+const originOf = (url: string) => (isWebUrl(url) ? new URL(url).origin : '')
 
 const backgroundFor = (url: string) => (isInternalUrl(url) ? '#0a0a0b' : '#ffffff')
 
-type InputHandler = (event: Event, input: Input) => void
+let nextTabId = 1
 
 export class TabManager {
   private readonly tabs: Tab[] = []
   private readonly win: BrowserWindow
-  private readonly onChange: (state: BrowserState) => void
-  private readonly onInput: InputHandler
+  private readonly options: Options
   private activeId = -1
-  private nextId = 1
   private chromeHeight = DEFAULT_CHROME_HEIGHT
 
-  constructor(win: BrowserWindow, onChange: (state: BrowserState) => void, onInput: InputHandler) {
+  constructor(win: BrowserWindow, options: Options) {
     this.win = win
-    this.onChange = onChange
-    this.onInput = onInput
+    this.options = options
     win.on('resize', () => this.layout())
   }
 
@@ -53,21 +72,55 @@ export class TabManager {
     return this.tabs.find((tab) => tab.id === id)
   }
 
-  create(url = HOME_URL): void {
-    const tab: Tab = {
-      id: this.nextId++,
+  has(id: number): boolean {
+    return !!this.byId(id)
+  }
+
+  owns(contents: WebContents): boolean {
+    return this.tabs.some((tab) => tab.view?.webContents === contents)
+  }
+
+  get size(): number {
+    return this.tabs.length
+  }
+
+  private newTab(url: string, title = '', sleeping = false): Tab {
+    return {
+      id: nextTabId++,
+      owner: this,
       view: null,
-      title: '',
+      title,
       url,
-      favicon: '',
+      favicon: sleeping ? cachedFavicon(url) : '',
       loading: false,
-      sleeping: false,
+      sleeping,
       loadStart: 0,
       loadMs: 0
     }
+  }
+
+  create(url = HOME_URL): void {
+    const tab = this.newTab(url)
     this.tabs.push(tab)
     this.load(tab, url)
     this.activate(tab.id)
+  }
+
+  snapshot(): SavedWindow {
+    return {
+      tabs: this.tabs.map(({ url, title }) => ({ url, title })),
+      activeIndex: Math.max(
+        0,
+        this.tabs.findIndex((tab) => tab.id === this.activeId)
+      )
+    }
+  }
+
+  restore(saved: SavedWindow): boolean {
+    for (const { url, title } of saved.tabs) this.tabs.push(this.newTab(url, title, true))
+    if (!this.tabs.length) return false
+    this.activate(this.tabs[Math.min(saved.activeIndex, this.tabs.length - 1)].id)
+    return true
   }
 
   openOrActivate(url: string): void {
@@ -77,19 +130,51 @@ export class TabManager {
   }
 
   close(id: number): void {
-    const index = this.tabs.findIndex((tab) => tab.id === id)
-    if (index === -1) return
-    const tab = this.tabs[index]
-    if (this.tabs.length === 1) this.create()
-    else if (id === this.activeId) this.activate((this.tabs[index + 1] ?? this.tabs[index - 1]).id)
-    this.tabs.splice(this.tabs.indexOf(tab), 1)
-    clearTimeout(tab.sleepTimer)
+    const tab = this.byId(id)
+    if (!tab) return
+    if (this.tabs.length === 1 && this.options.canCloseWindow()) {
+      this.win.close()
+      return
+    }
+    this.release(tab)
     this.destroyView(tab)
     this.emit()
   }
 
   closeActive(): void {
     this.close(this.activeId)
+  }
+
+  move(id: number, index: number): void {
+    const tab = this.byId(id)
+    if (!tab) return
+    this.tabs.splice(this.tabs.indexOf(tab), 1)
+    this.tabs.splice(Math.max(0, Math.min(index, this.tabs.length)), 0, tab)
+    this.emit()
+  }
+
+  detach(id: number): Tab | null {
+    const tab = this.byId(id)
+    if (!tab || this.tabs.length < 2) return null
+    this.release(tab)
+    if (tab.view) this.win.contentView.removeChildView(tab.view)
+    this.emit()
+    return tab
+  }
+
+  adopt(tab: Tab): void {
+    tab.owner = this
+    this.tabs.push(tab)
+    if (tab.view) this.win.contentView.addChildView(tab.view)
+    this.activate(tab.id)
+  }
+
+  destroyAll(): void {
+    for (const tab of this.tabs) {
+      clearTimeout(tab.sleepTimer)
+      tab.view?.webContents.close()
+    }
+    this.tabs.length = 0
   }
 
   activate(id: number): void {
@@ -188,6 +273,15 @@ export class TabManager {
     }))
   }
 
+  private release(tab: Tab): void {
+    const index = this.tabs.indexOf(tab)
+    if (this.tabs.length === 1) this.create()
+    else if (tab.id === this.activeId)
+      this.activate((this.tabs[index + 1] ?? this.tabs[index - 1]).id)
+    this.tabs.splice(this.tabs.indexOf(tab), 1)
+    clearTimeout(tab.sleepTimer)
+  }
+
   private wake(tab: Tab): void {
     tab.sleeping = false
     this.load(tab, tab.url)
@@ -218,6 +312,7 @@ export class TabManager {
     this.emit()
   }
 
+  // Tabs can move between windows, so view events always go to the tab's current owner.
   private createView(tab: Tab): WebContentsView {
     const view = new WebContentsView({
       webPreferences: {
@@ -231,7 +326,7 @@ export class TabManager {
     const contents = view.webContents
     // Popups are denied and opened as regular tabs so web content never gets a window handle of ours.
     contents.setWindowOpenHandler(({ url }) => {
-      if (isWebUrl(url)) this.create(url)
+      if (isWebUrl(url)) tab.owner.create(url)
       return { action: 'deny' }
     })
     // Web pages may never navigate into internal ox:// pages.
@@ -243,30 +338,32 @@ export class TabManager {
     contents.on('did-start-navigation', (event) => {
       if (event.isMainFrame && !event.isSameDocument) contents.setUserAgent(userAgentFor(event.url))
     })
-    contents.on('before-input-event', this.onInput)
+    contents.on('before-input-event', (event, input) => tab.owner.options.onInput(event, input))
+    contents.on('context-menu', (_event, params) =>
+      tab.owner.options.onContextMenu(contents, params)
+    )
     contents.on('did-start-loading', () =>
-      this.patch(tab, { loading: true, loadStart: Date.now() })
+      tab.owner.patch(tab, { loading: true, loadStart: Date.now() })
     )
     contents.on('did-stop-loading', () => {
       const loadMs = tab.loadStart ? Date.now() - tab.loadStart : tab.loadMs
-      this.patch(tab, { loading: false, loadMs })
+      tab.owner.patch(tab, { loading: false, loadMs })
+      if (!tab.favicon) tab.owner.updateFavicon(tab, [])
     })
     contents.on('page-title-updated', (_event, title) => {
       updateTitle(contents.getURL(), title)
-      this.patch(tab, { title })
+      tab.owner.patch(tab, { title })
     })
-    contents.on('page-favicon-updated', (_event, icons) => {
-      this.patch(tab, { favicon: icons.find(isWebUrl) ?? '' })
-    })
+    contents.on('page-favicon-updated', (_event, icons) => tab.owner.updateFavicon(tab, icons))
     contents.on('did-navigate', (_event, url) => {
       recordVisit(url, '')
       view.setBackgroundColor(backgroundFor(url))
-      this.patch(tab, { url, favicon: '' })
+      tab.owner.patch(tab, { url, favicon: cachedFavicon(url) })
     })
     contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (!isMainFrame) return
       recordVisit(url, '')
-      this.patch(tab, { url })
+      tab.owner.patch(tab, { url })
     })
     this.win.contentView.addChildView(view)
     view.setVisible(tab.id === this.activeId)
@@ -274,14 +371,22 @@ export class TabManager {
     return view
   }
 
+  private updateFavicon(tab: Tab, candidates: string[]): void {
+    const origin = originOf(tab.url)
+    resolveFavicon(tab.url, candidates).then((favicon) => {
+      if (favicon && originOf(tab.url) === origin && tab.owner.tabs.includes(tab))
+        tab.owner.patch(tab, { favicon })
+    })
+  }
+
   private patch(tab: Tab, changes: Partial<Tab>): void {
     Object.assign(tab, changes)
-    this.emit()
+    if (this.tabs.includes(tab)) this.emit()
   }
 
   private layout(): void {
     const view = this.active?.view
-    if (!view) return
+    if (!view || this.win.isDestroyed()) return
     const [width, height] = this.win.getContentSize()
     view.setBounds({
       x: 0,
@@ -292,7 +397,7 @@ export class TabManager {
   }
 
   private emit(): void {
-    this.onChange({
+    this.options.onChange({
       activeId: this.activeId,
       tabs: this.tabs.map((tab) => {
         const history = tab.view?.webContents.navigationHistory

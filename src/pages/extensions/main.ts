@@ -70,6 +70,14 @@ function card(extension: ExtensionInfo): HTMLElement {
     h(
       'div',
       { class: 'ext-actions' },
+      h('button', {
+        class: `icon-btn ext-pin${extension.pinned ? ' active' : ''}`,
+        icon: 'pin',
+        title: extension.pinned ? 'Unpin from toolbar' : 'Pin to toolbar',
+        'aria-pressed': String(extension.pinned),
+        disabled: !extension.enabled,
+        onclick: () => api.extensions.setPinned(extension.id, !extension.pinned)
+      }),
       extension.optionsUrl
         ? h('button', {
             class: 'icon-btn',

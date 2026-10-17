@@ -18,6 +18,32 @@ if (process.argv.includes('--ox-ui') || location.protocol === 'ox:') {
   })
 }
 
+// Electron has no passkey autofill UI, so the silent "conditional" WebAuthn requests many login pages
+// send on load open the Windows Hello dialog. Report conditional mediation as unavailable and keep such
+// requests pending, like a browser waiting for the user to pick a passkey. Explicit requests still work.
+if (location.protocol === 'https:' || location.protocol === 'http:') {
+  contextBridge.executeInMainWorld({
+    func: () => {
+      const credentials = navigator.credentials
+      if (!credentials || typeof PublicKeyCredential === 'undefined') return
+      PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false)
+      const capabilities = PublicKeyCredential.getClientCapabilities?.bind(PublicKeyCredential)
+      if (capabilities)
+        PublicKeyCredential.getClientCapabilities = () =>
+          capabilities().then((result) => ({ ...result, conditionalGet: false }))
+      const get = credentials.get.bind(credentials)
+      credentials.get = (options?: CredentialRequestOptions) => {
+        if (options?.mediation !== 'conditional') return get(options)
+        return new Promise((_resolve, reject) =>
+          options.signal?.addEventListener('abort', () =>
+            reject(options.signal?.reason ?? new DOMException('Aborted', 'AbortError'))
+          )
+        )
+      }
+    }
+  })
+}
+
 // Google sign-in gets a Firefox user agent (see main/compat.ts); Firefox has no userAgentData,
 // so the Chromium client hints must not leak through JavaScript either.
 if (location.hostname === 'accounts.google.com') {

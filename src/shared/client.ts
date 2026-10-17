@@ -41,6 +41,9 @@ export const api = {
     create: (url?: string) => send('tabs:new', url),
     close: (id: number) => send('tabs:close', id),
     activate: (id: number) => send('tabs:activate', id),
+    move: (id: number, index: number) => send('tabs:move', id, index),
+    detach: (id: number, screenX: number, screenY: number) =>
+      send('tabs:detach', id, Math.round(screenX), Math.round(screenY)),
     openInternal: (page: InternalPage) => send('tabs:open-internal', page),
     onState: on<BrowserState>('tabs:state')
   },
@@ -57,11 +60,16 @@ export const api = {
     bookmarkMenu: (id: string, x: number, y: number) => send('ui:bookmark-menu', id, x, y),
     bookmarkContext: (id: string, x: number, y: number) => send('ui:bookmark-context', id, x, y),
     extensionPopup: (id: string, x: number, y: number) => send('ui:extension-popup', id, x, y),
+    extensionsMenu: (x: number, y: number) => send('ui:extensions-menu', x, y),
     onFocusAddress: on<void>('ui:focus-address')
   },
   history: {
     complete: (text: string) => invoke<Completion | null>('history:complete', text),
     top: () => invoke<TopSite[]>('history:top')
+  },
+  favicons: {
+    all: () => invoke<Record<string, string>>('favicons:all'),
+    onUpdate: on<[string, string]>('favicons:updated')
   },
   bookmarks: {
     tree: () => invoke<BookmarkNode>('bookmarks:tree'),
@@ -107,6 +115,7 @@ export const api = {
     setEnabled: (id: string, enabled: boolean) =>
       invoke<void>('extensions:set-enabled', id, enabled),
     remove: (id: string) => invoke<void>('extensions:remove', id),
+    setPinned: (id: string, pinned: boolean) => send('extensions:set-pinned', id, pinned),
     options: (id: string) => send('extensions:options', id),
     onChange: on<ExtensionInfo[]>('extensions:changed')
   },

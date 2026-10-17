@@ -97,6 +97,22 @@ svg {
   color: var(--text);
 }
 
+.tab.settled:not(.leaving) {
+  animation: none;
+}
+
+.tab.dragging {
+  z-index: 2;
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  cursor: grabbing;
+}
+
+.tab.detaching {
+  opacity: 0.6;
+}
+
 .tab.leaving {
   pointer-events: none;
   animation: tab-out var(--duration-fast) var(--ease) both;
@@ -344,9 +360,70 @@ svg {
   place-items: center;
 }
 
-#update-button {
-  color: var(--success);
+.update-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  app-region: no-drag;
+  animation: fade-in var(--duration-base) var(--ease) both;
+  transition:
+    transform var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+
+.update-pill svg {
+  width: 14px;
+  height: 14px;
+}
+
+.update-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+}
+
+.update-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease);
+}
+
+.update-pill.ready {
+  border-color: transparent;
+  background: var(--success);
+  color: var(--on-accent);
+  font-weight: 600;
   animation: pop var(--duration-slow) var(--ease);
+}
+
+.update-pill.ready .update-progress {
+  opacity: 0;
+}
+
+.update-pill.ready:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 14px var(--accent-glow);
+}
+
+.update-pill.ready:active {
+  transform: scale(0.97);
 }
 
 .store-install {
@@ -470,6 +547,13 @@ svg {
 .bookmark-item svg {
   width: 14px;
   height: 14px;
+}
+
+.bookmark-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .bookmark-item span {

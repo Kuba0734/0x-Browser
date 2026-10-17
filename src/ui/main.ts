@@ -27,7 +27,10 @@ const bookmarkBar = byId('bookmark-bar')
 const downloadsButton = byId<HTMLButtonElement>('downloads-button')
 const downloadProgress = downloadsButton.querySelector('.download-progress > span') as HTMLElement
 const extensionActions = byId('extension-actions')
+const extensionsButton = byId<HTMLButtonElement>('extensions-button')
 const updateButton = byId<HTMLButtonElement>('update-button')
+const updateLabel = updateButton.querySelector('.update-label') as HTMLElement
+const updateProgress = updateButton.querySelector('.update-progress > span') as HTMLElement
 const storeButton = byId<HTMLButtonElement>('store-install')
 const storeLabel = storeButton.querySelector('.store-label') as HTMLElement
 
@@ -66,14 +69,20 @@ function createTabEl(id: number): HTMLElement {
   el.className = 'tab'
   el.setAttribute('role', 'tab')
   el.innerHTML = `<span class="tab-icon"><span class="tab-glyph"></span><img alt="" hidden><span class="spinner"></span></span><span class="tab-title"></span><button class="tab-close" title="Close tab" aria-label="Close tab">${icon('close')}</button>`
-  el.addEventListener('mousedown', (event) => {
-    if (event.button === 0) api.tabs.activate(id)
+  el.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return
+    api.tabs.activate(id)
+    startDrag(id, el, event)
   })
+  el.addEventListener('pointermove', moveDrag)
+  el.addEventListener('pointerup', endDrag)
+  el.addEventListener('pointercancel', endDrag)
+  el.addEventListener('animationend', () => el.classList.add('settled'), { once: true })
   el.addEventListener('auxclick', (event) => {
     if (event.button === 1) closeTab(id)
   })
   const close = el.querySelector('.tab-close') as HTMLButtonElement
-  close.addEventListener('mousedown', (event) => event.stopPropagation())
+  close.addEventListener('pointerdown', (event) => event.stopPropagation())
   close.addEventListener('click', () => closeTab(id))
   const img = el.querySelector('img') as HTMLImageElement
   img.addEventListener('error', () => {
@@ -116,7 +125,7 @@ function flipTabs(change: () => void): void {
   const easing = style.getPropertyValue('--ease').trim()
   for (const [id, el] of tabEls) {
     const left = before.get(id)
-    if (left === undefined) continue
+    if (left === undefined || el === dragging?.el) continue
     const dx = left - el.getBoundingClientRect().left
     if (Math.abs(dx) < 1) continue
     el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration, easing })
@@ -168,7 +177,102 @@ function renderTabs(): void {
       }
       updateTabEl(el, tab)
     }
+    if (dragging) return
+    const ordered = state.tabs.map((tab) => tabEls.get(tab.id)!)
+    const current = [...tabsEl.querySelectorAll('.tab:not(.leaving)')]
+    if (ordered.some((el, index) => current[index] !== el)) tabsEl.append(...ordered)
   })
+}
+
+type Drag = {
+  id: number
+  el: HTMLElement
+  startX: number
+  startY: number
+  grab: number
+  shift: number
+  active: boolean
+}
+
+const DRAG_THRESHOLD = 5
+const DETACH_DISTANCE = 40
+let dragging: Drag | null = null
+
+const visibleTabs = () => [...tabsEl.querySelectorAll<HTMLElement>('.tab:not(.leaving)')]
+
+function startDrag(id: number, el: HTMLElement, event: PointerEvent): void {
+  const left = el.getBoundingClientRect().left
+  dragging = {
+    id,
+    el,
+    startX: event.clientX,
+    startY: event.clientY,
+    grab: event.clientX - left,
+    shift: 0,
+    active: false
+  }
+  el.setPointerCapture(event.pointerId)
+}
+
+function isOutsideStrip(event: PointerEvent): boolean {
+  const strip = tabsEl.getBoundingClientRect()
+  return (
+    event.clientY > strip.bottom + DETACH_DISTANCE ||
+    event.clientY < -DETACH_DISTANCE ||
+    event.clientX < -DETACH_DISTANCE ||
+    event.clientX > innerWidth + DETACH_DISTANCE
+  )
+}
+
+function placeDragged(drag: Drag, clientX: number): void {
+  const layoutLeft = drag.el.getBoundingClientRect().left - drag.shift
+  drag.shift = clientX - drag.grab - layoutLeft
+  drag.el.style.transform = `translateX(${drag.shift}px)`
+}
+
+function moveDrag(event: PointerEvent): void {
+  const drag = dragging
+  if (!drag || drag.el !== event.currentTarget) return
+  if (!drag.active) {
+    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY)
+    if (distance < DRAG_THRESHOLD) return
+    drag.active = true
+    drag.el.classList.add('dragging')
+  }
+  placeDragged(drag, event.clientX)
+  drag.el.classList.toggle('detaching', isOutsideStrip(event) && state.tabs.length > 1)
+  const tabs = visibleTabs()
+  const index = tabs.indexOf(drag.el)
+  const center = drag.el.getBoundingClientRect().left + drag.el.offsetWidth / 2
+  const next = tabs[index + 1]
+  const previous = tabs[index - 1]
+  const middle = (el: HTMLElement) => el.getBoundingClientRect().left + el.offsetWidth / 2
+  let target: (() => void) | null = null
+  if (next && center > middle(next)) target = () => next.after(drag.el)
+  else if (previous && center < middle(previous)) target = () => previous.before(drag.el)
+  if (!target) return
+  flipTabs(target)
+  placeDragged(drag, event.clientX)
+}
+
+function endDrag(event: PointerEvent): void {
+  const drag = dragging
+  if (!drag || drag.el !== event.currentTarget) return
+  dragging = null
+  const { el, shift } = drag
+  el.classList.remove('dragging', 'detaching')
+  el.style.transform = ''
+  if (!drag.active) return
+  if (event.type === 'pointerup' && isOutsideStrip(event) && state.tabs.length > 1) {
+    api.tabs.detach(drag.id, event.screenX, event.screenY)
+    return
+  }
+  const style = getComputedStyle(document.documentElement)
+  el.animate([{ transform: `translateX(${shift}px)` }, { transform: 'none' }], {
+    duration: parseFloat(style.getPropertyValue('--duration-base')) || 0,
+    easing: style.getPropertyValue('--ease').trim()
+  })
+  api.tabs.move(drag.id, visibleTabs().indexOf(el))
 }
 
 function renderStar(): void {
@@ -220,6 +324,16 @@ function collectUrls(node: BookmarkNode, urls: Set<string>): Set<string> {
   return urls
 }
 
+let favicons: Record<string, string> = {}
+
+function faviconFor(url: string): string {
+  try {
+    return favicons[new URL(url).origin] ?? ''
+  } catch {
+    return ''
+  }
+}
+
 let reportedHeight = -1
 
 // The tab view covers the UI until it knows the chrome height, and a covered UI does not render,
@@ -238,7 +352,14 @@ function renderBookmarkBar(): void {
       const item = document.createElement('button')
       item.className = 'bookmark-item'
       item.title = node.url ? `${node.title}\n${displayUrl(node.url)}` : node.title
-      item.innerHTML = icon(node.children ? 'folder' : 'globe')
+      const favicon = node.url ? faviconFor(node.url) : ''
+      if (favicon) {
+        const img = document.createElement('img')
+        img.className = 'bookmark-favicon'
+        img.src = favicon
+        img.alt = ''
+        item.append(img)
+      } else item.innerHTML = icon(node.children ? 'folder' : 'globe')
       const label = document.createElement('span')
       label.textContent = node.title || displayUrl(node.url ?? '')
       item.append(label)
@@ -282,9 +403,10 @@ function applyDownloads(list: DownloadState[]): void {
 function applyExtensions(list: ExtensionInfo[]): void {
   installedIds = new Set(list.map((extension) => extension.id))
   renderStoreButton()
+  extensionsButton.hidden = !list.some((extension) => extension.enabled)
   extensionActions.replaceChildren(
     ...list
-      .filter((extension) => extension.enabled && extension.hasPopup)
+      .filter((extension) => extension.enabled && extension.pinned)
       .map((extension) => {
         const button = document.createElement('button')
         button.className = 'icon-btn extension-action'
@@ -298,7 +420,8 @@ function applyExtensions(list: ExtensionInfo[]): void {
         } else button.innerHTML = icon('extensions')
         button.addEventListener('click', () => {
           const rect = button.getBoundingClientRect()
-          api.ui.extensionPopup(extension.id, rect.right, rect.bottom + 4)
+          if (extension.hasPopup) api.ui.extensionPopup(extension.id, rect.right, rect.bottom + 4)
+          else if (extension.optionsUrl) api.extensions.options(extension.id)
         })
         return button
       })
@@ -312,8 +435,18 @@ function applyUiSettings(settings: Settings): void {
 }
 
 function applyUpdate(update: UpdateState): void {
-  updateButton.hidden = update.status !== 'ready'
-  updateButton.title = `Restart to update to ${update.version}`
+  const downloading = update.status === 'downloading'
+  const ready = update.status === 'ready'
+  updateButton.hidden = !downloading && !ready
+  updateButton.disabled = !ready
+  updateButton.classList.toggle('ready', ready)
+  updateLabel.textContent = ready
+    ? 'Restart to update'
+    : `Downloading ${update.version} · ${Math.round(update.progress)} %`
+  updateButton.title = ready
+    ? `Version ${update.version} is ready. Restart to install it.`
+    : `Version ${update.version} is downloading in the background`
+  updateProgress.style.transform = `scaleX(${ready ? 1 : update.progress / 100})`
 }
 
 api.tabs.onState((next) => {
@@ -336,6 +469,14 @@ api.updates.onChange(applyUpdate)
 api.settings.get().then(applyUiSettings)
 api.updates.state().then(applyUpdate)
 api.bookmarks.tree().then(applyBookmarks)
+api.favicons.all().then((all) => {
+  favicons = all
+  renderBookmarkBar()
+})
+api.favicons.onUpdate(([origin, favicon]) => {
+  favicons[origin] = favicon
+  if (barNodes.some((node) => node.url && faviconFor(node.url) === favicon)) renderBookmarkBar()
+})
 api.downloads.list().then(applyDownloads)
 api.extensions.list().then(applyExtensions)
 
@@ -410,6 +551,10 @@ storeButton.addEventListener('click', async () => {
     storeButton.disabled = false
     storeLabel.textContent = 'Install failed, retry'
   }
+})
+extensionsButton.addEventListener('click', () => {
+  const rect = extensionsButton.getBoundingClientRect()
+  api.ui.extensionsMenu(rect.right, rect.bottom + 4)
 })
 downloadsButton.addEventListener('click', () => api.tabs.openInternal('downloads'))
 byId('menu-button').addEventListener('click', (event) => {

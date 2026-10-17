@@ -1,6 +1,6 @@
 import type { InternalPage } from '../../shared/client'
 import type { IconName } from '../../shared/icons'
-import { api, h, initPage, reveal } from '../shared/kit'
+import { api, h, initPage, loadFavicons, reveal } from '../shared/kit'
 import './home.css'
 
 const TILES: [InternalPage, string, IconName][] = [
@@ -54,7 +54,7 @@ initPage()
 reveal(page.querySelectorAll('.home-tile'))
 search.focus()
 
-api.history.top().then((top) => {
+Promise.all([api.history.top(), loadFavicons()]).then(([top, faviconFor]) => {
   if (!top.length) return
   sites.append(
     h('h2', { class: 'section-title', text: 'Most visited' }),
@@ -73,7 +73,13 @@ api.history.top().then((top) => {
               if (event.button === 1) api.tabs.create(site.url)
             }
           },
-          h('span', { class: 'home-site-letter', text: host.charAt(0).toUpperCase() }),
+          faviconFor(site.url)
+            ? h(
+                'span',
+                { class: 'home-site-letter' },
+                h('img', { src: faviconFor(site.url), alt: '' })
+              )
+            : h('span', { class: 'home-site-letter', text: host.charAt(0).toUpperCase() }),
           h('span', { class: 'home-site-title', text: site.title || host })
         )
       })

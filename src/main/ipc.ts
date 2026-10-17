@@ -7,31 +7,34 @@ import {
 } from 'electron'
 import { INTERNAL_PREFIX } from './url'
 
-let ui: WebContents | null = null
+const uis = new Set<WebContents>()
 
-export function setUi(contents: WebContents): void {
-  ui = contents
+export function addUi(contents: WebContents): void {
+  uis.add(contents)
+  contents.once('destroyed', () => uis.delete(contents))
 }
 
 // Core access is limited to the browser UI and the main frame of internal ox:// pages.
 function isTrusted(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
-  if (event.sender === ui) return true
+  if (uis.has(event.sender)) return true
   const frame = event.senderFrame
   return !!frame && frame === event.sender.mainFrame && frame.url.startsWith(INTERNAL_PREFIX)
 }
 
-export function handle(channel: string, handler: (...args: unknown[]) => unknown): void {
+type Handler<T> = (sender: WebContents, ...args: unknown[]) => T
+
+export function handle(channel: string, handler: Handler<unknown>): void {
   ipcMain.handle(channel, (event, ...args) => {
     if (!isTrusted(event)) throw new Error('Forbidden')
-    return handler(...args)
+    return handler(event.sender, ...args)
   })
 }
 
-export function listen(channel: string, handler: (...args: unknown[]) => void): void {
+export function listen(channel: string, handler: Handler<void>): void {
   ipcMain.on(channel, (event, ...args) => {
     if (!isTrusted(event)) return
     try {
-      handler(...args)
+      handler(event.sender, ...args)
     } catch (error) {
       if (!(error instanceof TypeError)) throw error
     }
@@ -40,7 +43,7 @@ export function listen(channel: string, handler: (...args: unknown[]) => void): 
 
 export function broadcast(channel: string, payload: unknown): void {
   for (const contents of webContents.getAllWebContents()) {
-    if (contents === ui || contents.getURL().startsWith(INTERNAL_PREFIX))
+    if (uis.has(contents) || contents.getURL().startsWith(INTERNAL_PREFIX))
       contents.send(channel, payload)
   }
 }
