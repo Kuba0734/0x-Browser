@@ -1,0 +1,81 @@
+@font-face {
+  font-family: 'Inter';
+  src: url('../../assets/fonts/inter-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg: #0a0a0b;
+  --surface: #121214;
+  --surface-raised: #1a1a1d;
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --surface-active: rgba(255, 255, 255, 0.1);
+  --glass: rgba(18, 18, 20, 0.72);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --text: #f2f2f3;
+  --text-muted: #9a9aa1;
+  --text-faint: #5c5c63;
+
+  --accent: #ffffff;
+  --on-accent: #0a0a0b;
+  --accent-glow: rgba(255, 255, 255, 0.14);
+  --danger: #ff5c5c;
+  --success: #3ddc84;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --font: 'Inter', system-ui, sans-serif;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 15px;
+  --font-size-xl: 40px;
+
+  --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --blur: 20px;
+
+  --tabstrip-height: 40px;
+  --toolbar-height: 44px;
+  --tab-width: 220px;
+  --tab-min-width: 72px;
+  --icon-size: 16px;
+  --button-size: 30px;
+  --window-controls-fallback: 138px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 300ms;
+  --duration-spin: 800ms;
+  --duration-progress: 1200ms;
+  --stagger: 50ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-base: 1ms;
+    --duration-slow: 1ms;
+    --stagger: 0ms;
+  }
+}
+
+:root[data-reduced-motion] {
+  --duration-fast: 1ms;
+  --duration-base: 1ms;
+  --duration-slow: 1ms;
+  --stagger: 0ms;
+}

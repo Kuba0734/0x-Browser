@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: http:; font-src 'self'"
+    />
+    <title>0x Browser</title>
+    <link rel="stylesheet" href="./tokens.css" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header id="chrome">
+      <div id="tabstrip">
+        <div id="tabs" role="tablist"></div>
+        <button id="new-tab" class="icon-btn" title="New tab" aria-label="New tab">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
+      </div>
+      <div id="toolbar">
+        <button id="back" class="icon-btn" title="Back" aria-label="Back" disabled>
+          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+        <button id="forward" class="icon-btn" title="Forward" aria-label="Forward" disabled>
+          <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+        <button id="reload" class="icon-btn" title="Reload" aria-label="Reload">
+          <svg class="icon-reload" viewBox="0 0 24 24">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+            <path d="M20 4v5h-5" />
+          </svg>
+          <svg class="icon-stop" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+        <form id="address-form">
+          <input
+            id="address"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="Search or enter address"
+            aria-label="Address"
+          />
+        </form>
+      </div>
+      <div id="progress"></div>
+    </header>
+    <main id="newtab">
+      <p class="newtab-logo">0x</p>
+      <p class="newtab-hint">Search or enter an address</p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

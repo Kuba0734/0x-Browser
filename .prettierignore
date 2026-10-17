@@ -1,0 +1,4 @@
+out/
+dist/
+package-lock.json
+CLAUDE.md
