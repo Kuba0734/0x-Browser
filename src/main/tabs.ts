@@ -1,7 +1,9 @@
+import { join } from 'node:path'
 import { WebContentsView, type BrowserWindow, type Event, type Input } from 'electron'
-import type { BrowserState } from '../shared/types'
+import type { BrowserState, PerfTab } from '../shared/types'
 import { recordVisit, updateTitle } from './history'
-import { isWebUrl } from './url'
+import { getSettings } from './settings'
+import { HOME_URL, isInternalUrl, isWebUrl } from './url'
 
 type Tab = {
   id: number
@@ -10,7 +12,13 @@ type Tab = {
   url: string
   favicon: string
   loading: boolean
+  sleeping: boolean
+  loadStart: number
+  loadMs: number
+  sleepTimer?: NodeJS.Timeout
 }
+
+const backgroundFor = (url: string) => (isInternalUrl(url) ? '#0a0a0b' : '#ffffff')
 
 type InputHandler = (event: Event, input: Input) => void
 
@@ -38,30 +46,41 @@ export class TabManager {
     return this.active?.view?.webContents
   }
 
-  create(url = ''): void {
+  private byId(id: number): Tab | undefined {
+    return this.tabs.find((tab) => tab.id === id)
+  }
+
+  create(url = HOME_URL): void {
     const tab: Tab = {
       id: this.nextId++,
       view: null,
       title: '',
-      url: '',
+      url,
       favicon: '',
-      loading: false
+      loading: false,
+      sleeping: false,
+      loadStart: 0,
+      loadMs: 0
     }
     this.tabs.push(tab)
+    this.load(tab, url)
     this.activate(tab.id)
-    if (url) this.load(tab, url)
+  }
+
+  openOrActivate(url: string): void {
+    const existing = this.tabs.find((tab) => tab.url === url)
+    if (existing) this.activate(existing.id)
+    else this.create(url)
   }
 
   close(id: number): void {
     const index = this.tabs.findIndex((tab) => tab.id === id)
     if (index === -1) return
     const [tab] = this.tabs.splice(index, 1)
-    if (tab.view) {
-      this.win.contentView.removeChildView(tab.view)
-      tab.view.webContents.close()
-    }
+    this.destroyView(tab)
+    clearTimeout(tab.sleepTimer)
     if (this.tabs.length === 0) {
-      this.win.close()
+      this.create()
       return
     }
     if (id === this.activeId) this.activate(this.tabs[Math.min(index, this.tabs.length - 1)].id)
@@ -73,13 +92,17 @@ export class TabManager {
   }
 
   activate(id: number): void {
-    if (!this.tabs.some((tab) => tab.id === id)) return
+    const tab = this.byId(id)
+    if (!tab) return
+    const previous = this.active
     this.activeId = id
-    for (const tab of this.tabs) tab.view?.setVisible(tab.id === id)
+    clearTimeout(tab.sleepTimer)
+    if (previous && previous !== tab) this.scheduleSleep(previous)
+    if (tab.sleeping) this.wake(tab)
+    for (const other of this.tabs) other.view?.setVisible(other.id === id)
     this.layout()
-    const contents = this.activeContents
-    if (contents) contents.focus()
-    else this.win.webContents.focus()
+    if (tab.url === HOME_URL) this.win.webContents.focus()
+    else tab.view?.webContents.focus()
     this.emit()
   }
 
@@ -125,16 +148,83 @@ export class TabManager {
     this.layout()
   }
 
+  sleep(id: number): void {
+    const tab = this.byId(id)
+    if (!tab || tab.id === this.activeId || tab.sleeping) return
+    this.destroyView(tab)
+    tab.sleeping = true
+    tab.loading = false
+    this.emit()
+  }
+
+  sleepInactive(): void {
+    for (const tab of this.tabs) this.sleep(tab.id)
+  }
+
+  wakeTab(id: number): void {
+    const tab = this.byId(id)
+    if (tab?.sleeping) {
+      this.wake(tab)
+      this.emit()
+    }
+  }
+
+  rescheduleSleep(): void {
+    for (const tab of this.tabs) if (tab.id !== this.activeId) this.scheduleSleep(tab)
+  }
+
+  perfTabs(): (PerfTab & { pid: number })[] {
+    return this.tabs.map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      url: tab.url,
+      active: tab.id === this.activeId,
+      sleeping: tab.sleeping,
+      memoryKB: 0,
+      cpu: 0,
+      loadMs: tab.loadMs,
+      pid: tab.view?.webContents.getOSProcessId() ?? -1
+    }))
+  }
+
+  private wake(tab: Tab): void {
+    tab.sleeping = false
+    this.load(tab, tab.url)
+  }
+
+  private scheduleSleep(tab: Tab): void {
+    clearTimeout(tab.sleepTimer)
+    const minutes = getSettings().sleepAfterMinutes
+    if (minutes <= 0 || tab.sleeping) return
+    tab.sleepTimer = setTimeout(() => {
+      if (tab.view?.webContents.isCurrentlyAudible()) this.scheduleSleep(tab)
+      else this.sleep(tab.id)
+    }, minutes * 60_000)
+  }
+
+  private destroyView(tab: Tab): void {
+    if (!tab.view) return
+    this.win.contentView.removeChildView(tab.view)
+    tab.view.webContents.close()
+    tab.view = null
+  }
+
   private load(tab: Tab, url: string): void {
     const view = tab.view ?? this.createView(tab)
     tab.url = url
+    view.setBackgroundColor(backgroundFor(url))
     view.webContents.loadURL(url).catch(() => undefined)
     this.emit()
   }
 
   private createView(tab: Tab): WebContentsView {
     const view = new WebContentsView({
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
     })
     tab.view = view
     const contents = view.webContents
@@ -143,9 +233,20 @@ export class TabManager {
       if (isWebUrl(url)) this.create(url)
       return { action: 'deny' }
     })
+    // Web pages may never navigate into internal ox:// pages.
+    const guard = (event: Event, url: string) => {
+      if (isInternalUrl(url) && !isInternalUrl(contents.getURL())) event.preventDefault()
+    }
+    contents.on('will-navigate', (event) => guard(event, event.url))
+    contents.on('will-redirect', (event) => guard(event, event.url))
     contents.on('before-input-event', this.onInput)
-    contents.on('did-start-loading', () => this.patch(tab, { loading: true }))
-    contents.on('did-stop-loading', () => this.patch(tab, { loading: false }))
+    contents.on('did-start-loading', () =>
+      this.patch(tab, { loading: true, loadStart: Date.now() })
+    )
+    contents.on('did-stop-loading', () => {
+      const loadMs = tab.loadStart ? Date.now() - tab.loadStart : tab.loadMs
+      this.patch(tab, { loading: false, loadMs })
+    })
     contents.on('page-title-updated', (_event, title) => {
       updateTitle(contents.getURL(), title)
       this.patch(tab, { title })
@@ -155,6 +256,7 @@ export class TabManager {
     })
     contents.on('did-navigate', (_event, url) => {
       recordVisit(url, '')
+      view.setBackgroundColor(backgroundFor(url))
       this.patch(tab, { url, favicon: '' })
     })
     contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
@@ -196,6 +298,7 @@ export class TabManager {
           url: tab.url,
           favicon: tab.favicon,
           loading: tab.loading,
+          sleeping: tab.sleeping,
           canGoBack: history?.canGoBack() ?? false,
           canGoForward: history?.canGoForward() ?? false
         }

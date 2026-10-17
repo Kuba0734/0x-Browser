@@ -7,6 +7,7 @@
 }
 
 :root {
+  color-scheme: dark;
   --bg: #0a0a0b;
   --surface: #121214;
   --surface-raised: #1a1a1d;
@@ -60,22 +61,25 @@
   --duration-base: 220ms;
   --duration-slow: 300ms;
   --duration-spin: 800ms;
+  --duration-page: 400ms;
   --duration-progress: 1200ms;
   --stagger: 50ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --duration-fast: 1ms;
-    --duration-base: 1ms;
-    --duration-slow: 1ms;
-    --stagger: 0ms;
+    --duration-fast: 1ms !important;
+    --duration-base: 1ms !important;
+    --duration-slow: 1ms !important;
+    --duration-page: 1ms !important;
+    --stagger: 0ms !important;
   }
 }
 
 :root[data-reduced-motion] {
-  --duration-fast: 1ms;
-  --duration-base: 1ms;
-  --duration-slow: 1ms;
-  --stagger: 0ms;
+  --duration-fast: 1ms !important;
+  --duration-base: 1ms !important;
+  --duration-slow: 1ms !important;
+  --duration-page: 1ms !important;
+  --stagger: 0ms !important;
 }

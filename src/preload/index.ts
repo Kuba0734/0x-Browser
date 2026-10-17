@@ -1,23 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BrowserState, Completion } from '../shared/types'
 
-const api = {
-  newTab: () => ipcRenderer.send('tabs:new'),
-  closeTab: (id: number) => ipcRenderer.send('tabs:close', id),
-  activateTab: (id: number) => ipcRenderer.send('tabs:activate', id),
-  go: (input: string) => ipcRenderer.send('nav:go', input),
-  back: () => ipcRenderer.send('nav:back'),
-  forward: () => ipcRenderer.send('nav:forward'),
-  reload: () => ipcRenderer.send('nav:reload'),
-  stop: () => ipcRenderer.send('nav:stop'),
-  setChromeHeight: (height: number) => ipcRenderer.send('ui:chrome-height', height),
-  completeHistory: (text: string): Promise<Completion | null> =>
-    ipcRenderer.invoke('history:complete', text),
-  onState: (callback: (state: BrowserState) => void) =>
-    ipcRenderer.on('tabs:state', (_event, state: BrowserState) => callback(state)),
-  onFocusAddress: (callback: () => void) => ipcRenderer.on('ui:focus-address', () => callback())
+const CHANNEL = /^[a-z]+:[a-z-]+$/
+
+function check(channel: unknown): string {
+  if (typeof channel !== 'string' || !CHANNEL.test(channel)) throw new Error('Invalid channel')
+  return channel
 }
 
-export type Api = typeof api
-
-contextBridge.exposeInMainWorld('api', api)
+// Web tabs share this preload; only the browser UI (flagged via argv) and internal ox:// pages get the bridge.
+// The main process re-checks every sender, so this is defense in depth.
+if (process.argv.includes('--ox-ui') || location.protocol === 'ox:') {
+  contextBridge.exposeInMainWorld('ox', {
+    invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(check(channel), ...args),
+    send: (channel: string, ...args: unknown[]) => ipcRenderer.send(check(channel), ...args),
+    on: (channel: string, listener: (value: unknown) => void) =>
+      ipcRenderer.on(check(channel), (_event, value) => listener(value))
+  })
+}

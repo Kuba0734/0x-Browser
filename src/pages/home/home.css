@@ -1,0 +1,137 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 14vh;
+}
+
+.home-logo {
+  font-size: 72px;
+  font-weight: 750;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+.home-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(600px, 100%);
+  height: 50px;
+  margin-top: var(--space-8);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  backdrop-filter: blur(var(--blur));
+  box-shadow: var(--shadow-soft);
+  color: var(--text-faint);
+  transition:
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.home-search:focus-within {
+  border-color: var(--border-strong);
+  box-shadow:
+    var(--shadow-soft),
+    0 0 0 4px var(--accent-glow);
+}
+
+.home-search-input {
+  flex: 1;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-size-lg);
+  outline: none;
+}
+
+.home-search-input::placeholder {
+  color: var(--text-faint);
+}
+
+.home-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+}
+
+.home-tile,
+.home-site {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 112px;
+  padding: var(--space-4) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    transform var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.home-tile:hover,
+.home-site:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 24px var(--accent-glow);
+  color: var(--text);
+}
+
+.home-tile:active,
+.home-site:active {
+  transform: scale(0.97);
+}
+
+.home-tile-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.home-sites {
+  width: min(600px, 100%);
+}
+
+.home-sites .section-title {
+  text-align: center;
+}
+
+.home-site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-3);
+}
+
+.home-site {
+  width: auto;
+}
+
+.home-site-letter {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.home-site-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

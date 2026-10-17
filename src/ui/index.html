@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: http:; font-src 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:; font-src 'self'"
     />
     <title>0x Browser</title>
     <link rel="stylesheet" href="./tokens.css" />
@@ -14,24 +14,36 @@
     <header id="chrome">
       <div id="tabstrip">
         <div id="tabs" role="tablist"></div>
-        <button id="new-tab" class="icon-btn" title="New tab" aria-label="New tab">
-          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-        </button>
+        <button
+          id="new-tab"
+          class="icon-btn"
+          data-icon="plus"
+          title="New tab"
+          aria-label="New tab"
+        ></button>
       </div>
       <div id="toolbar">
-        <button id="back" class="icon-btn" title="Back" aria-label="Back" disabled>
-          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>
-        </button>
-        <button id="forward" class="icon-btn" title="Forward" aria-label="Forward" disabled>
-          <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" /></svg>
-        </button>
+        <button
+          id="back"
+          class="icon-btn"
+          data-icon="back"
+          title="Back"
+          aria-label="Back"
+          disabled
+        ></button>
+        <button
+          id="forward"
+          class="icon-btn"
+          data-icon="forward"
+          title="Forward"
+          aria-label="Forward"
+          disabled
+        ></button>
         <button id="reload" class="icon-btn" title="Reload" aria-label="Reload">
-          <svg class="icon-reload" viewBox="0 0 24 24">
-            <path d="M20 12a8 8 0 1 1-2.34-5.66" />
-            <path d="M20 4v5h-5" />
-          </svg>
-          <svg class="icon-stop" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          <span class="icon-reload" data-icon="reload"></span>
+          <span class="icon-stop" data-icon="close"></span>
         </button>
+        <button id="home" class="icon-btn" data-icon="home" title="Home" aria-label="Home"></button>
         <form id="address-form">
           <input
             id="address"
@@ -41,14 +53,46 @@
             placeholder="Search or enter address"
             aria-label="Address"
           />
+          <button
+            id="star"
+            type="button"
+            class="icon-btn"
+            data-icon="star"
+            title="Bookmark this page"
+            aria-label="Bookmark this page"
+            aria-pressed="false"
+          ></button>
         </form>
+        <div id="extension-actions"></div>
+        <button
+          id="update-button"
+          class="icon-btn"
+          data-icon="update"
+          title="Restart to update"
+          aria-label="Restart to update"
+          hidden
+        ></button>
+        <button
+          id="downloads-button"
+          class="icon-btn"
+          title="Downloads"
+          aria-label="Downloads"
+          hidden
+        >
+          <span data-icon="download"></span>
+          <span class="download-progress"><span></span></span>
+        </button>
+        <button
+          id="menu-button"
+          class="icon-btn"
+          data-icon="menu"
+          title="Menu"
+          aria-label="Menu"
+        ></button>
       </div>
+      <nav id="bookmark-bar" aria-label="Bookmarks bar" hidden></nav>
       <div id="progress"></div>
     </header>
-    <main id="newtab">
-      <p class="newtab-logo">0x</p>
-      <p class="newtab-hint">Search or enter an address</p>
-    </main>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

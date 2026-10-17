@@ -10,20 +10,30 @@ Performance hat Vorrang vor Optik: Wenn eine Design- oder Animationsregel die Pe
 - Plattform: nur Windows
 - Build: electron-vite (main / preload / renderer getrennt)
 - Lint/Format: ESLint + Prettier
-- Packaging: electron-builder (NSIS-Installer), kein Auto-Update
+- Packaging: electron-builder (NSIS-Installer, `npm run dist` lokal), Releases baut GitHub Actions beim Push eines Tags `vX.Y.Z` (muss zur Version in `package.json` passen)
+- Updates: electron-updater prüft beim Start GitHub Releases von `Kuba0734/0x-Browser` (Repo muss öffentlich sein), lädt im Hintergrund und installiert beim Beenden oder per „Restart to update“
+- Darkmode für Webseiten: Chromium-Feature `WebContentsForceDark`, per Setting abschaltbar, wirkt erst nach Neustart; eigene Seiten setzen `color-scheme: dark` und werden deshalb nicht umgefärbt
 - Speicherung: SQLite für den Verlauf, JSON-Dateien für Settings und Bookmarks (atomar schreiben: temp-Datei + rename)
 - Standard-Suchmaschine: Google (in Settings änderbar)
 - UI: Vanilla HTML/CSS/TS, keine UI-Frameworks oder Animations-Libraries
 - Interne Seiten laufen unter `0x://` (z. B. `0x://settings`, `0x://downloads`, `0x://performance`)
+  - Workaround: URL-Schemes dürfen nicht mit einer Ziffer beginnen, intern heißt das Scheme deshalb `ox://`. Die Adressleiste zeigt `0x://` an und akzeptiert beides.
 
 
 ## Projektstruktur
 - `src/main/` – Browser-Kern (Tabs, Fenster, Prozesse)
 - `src/preload/` – Preload-Skripte, einzige Brücke zwischen UI und Kern (`contextBridge`)
 - `src/ui/` – Browser-Oberfläche (Tab-Leiste, Adressleiste)
-- `src/shared/` – gemeinsame Typen für Kern, Preload und UI
-- `src/pages/` – interne Seiten (settings, bookmarks, downloads, extensions, performance)
-- `assets/fonts/`, `assets/icons/` – lokale Schriften und Icons
+- `src/shared/` – gemeinsame Typen, IPC-Client (`client.ts`), Settings/Design-Tokens, Inline-SVG-Icons
+- `src/splash/` – Startup-Fenster
+- `src/pages/` – interne Seiten (home, settings, bookmarks, downloads, extensions, performance), gemeinsames Kit in `src/pages/shared/`
+- `assets/fonts/`, `assets/icons/` – lokale Schriften und Icons (App-Icon: `app.svg` ist die Quelle, `npm run icons` erzeugt `app.png`/`app.ico`)
+- `scripts/` – Build-Hilfsskripte
+
+## Architektur-Regeln
+- IPC nur über `handle`/`listen` aus `src/main/ipc.ts`: erlaubt sind nur die Browser-UI und der Main-Frame interner `ox://`-Seiten, jedes Argument wird validiert
+- Daten liegen in `userData`: `history.db` (SQLite), `settings.json`, `bookmarks.json`, `downloads.json`, `extensions.json`; JSON immer über `writeJson` (atomar)
+- Die Performance-Seite aktualisiert sich alle 2 s, aber nur solange sie sichtbar ist (einzige bewusste Ausnahme von „nichts pollen“)
 
 ## Arbeitsweise
 - Antworte mir immer auf Deutsch
@@ -42,6 +52,9 @@ Performance hat Vorrang vor Optik: Wenn eine Design- oder Animationsregel die Pe
 5. Settings: alle Design-Variablen und Verhalten einstellbar, sofort live übernommen
 6. Performance-Seite: RAM/CPU pro Tab, Ladezeiten, Tabs schlafen legen, ...
 7. Extensions: chrome extensions istallierbar und eigenen vom pc
+8. Home-Tab `0x://home`: Standard für neue Tabs und wenn der letzte Tab geschlossen wird (Fenster bleibt offen); Kacheln zu allen internen Seiten
+9. Import in Settings aus anderen Browsern (Chrome, Edge, Brave, Opera, Vivaldi, Firefox): Bookmarks, Verlauf, Cookies nur aus Firefox (Chromium-Cookies sind App-Bound-verschlüsselt)
+10. Icons: Standard-Tab-Icon ohne Favicon, eigenes App-Icon (`assets/icons/`)
 
 ## Performance
 - Inaktive Tabs nach 3 Minuten schlafen legen
@@ -52,7 +65,7 @@ Performance hat Vorrang vor Optik: Wenn eine Design- oder Animationsregel die Pe
 - Webinhalte strikt vom Browser-Kern isoliert (Sandbox, keine Node-/System-APIs im Web-Content)
 - Electron: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false` für alle WebContents; Web-Tabs bekommen kein Preload mit Kern-Zugriff
 - Interne `0x://`-Seiten sind von normalen Webseiten aus nicht erreichbar
-- Keine Telemetrie, keine externen Requests außer den vom Nutzer aufgerufenen Seiten
+- Keine Telemetrie, keine externen Requests außer den vom Nutzer aufgerufenen Seiten und dem Update-Check gegen GitHub Releases beim Start
 
 ## Logging
 - Nur Crashes, Renderer-Abstürze und fehlgeschlagene Downloads/Updates

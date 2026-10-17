@@ -1,0 +1,76 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  user-select: none;
+  app-region: drag;
+}
+
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  height: 100%;
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  background: radial-gradient(circle at 50% 35%, var(--accent-glow), transparent 65%);
+}
+
+.splash > * {
+  animation: rise var(--duration-page) var(--ease) both;
+}
+
+.splash > :nth-child(2) {
+  animation-delay: var(--stagger);
+}
+
+.splash > :nth-child(3) {
+  animation-delay: calc(var(--stagger) * 2);
+}
+
+.logo {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+}
+
+.splash > .spinner {
+  animation:
+    rise var(--duration-page) var(--ease) var(--stagger) both,
+    spin var(--duration-spin) var(--ease) infinite;
+}
+
+.label {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

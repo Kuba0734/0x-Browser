@@ -11,12 +11,15 @@
     "start": "electron-vite preview",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
+    "icons": "electron scripts/build-icons.js",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "dist": "npm run build && electron-builder --win --publish never"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@fontsource-variable/inter": "^5.3.0",
     "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^6.0.0",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
@@ -24,5 +27,44 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2",
     "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "allowScripts": {
+    "electron-winstaller": false
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kuba0734/0x-Browser.git"
+  },
+  "author": "Kuba0734",
+  "build": {
+    "appId": "com.kuba0734.0xbrowser",
+    "productName": "0x Browser",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**",
+      "assets/icons/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icons/app.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "0x-Browser-Setup-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Kuba0734",
+      "repo": "0x-Browser",
+      "releaseType": "release"
+    }
   }
 }

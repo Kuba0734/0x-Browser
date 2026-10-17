@@ -1,0 +1,40 @@
+.dl-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+
+.dl-row.active .dl-icon {
+  color: var(--accent);
+}
+
+.dl-row.failed .row-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.dl-track {
+  height: 3px;
+  margin-top: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-active);
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease);
+}
+
+.dl-row.active .dl-track {
+  opacity: 1;
+}
+
+.dl-track > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease);
+}

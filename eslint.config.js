@@ -8,10 +8,15 @@ module.exports = tseslint.config(
   ...tseslint.configs.recommended,
   prettier,
   {
-    files: ['eslint.config.js'],
+    files: ['eslint.config.js', 'scripts/**/*.js'],
     languageOptions: {
       sourceType: 'commonjs',
-      globals: { require: 'readonly', module: 'writable' }
+      globals: {
+        require: 'readonly',
+        module: 'writable',
+        __dirname: 'readonly',
+        Buffer: 'readonly'
+      }
     },
     rules: { '@typescript-eslint/no-require-imports': 'off' }
   }

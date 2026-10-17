@@ -1,7 +1,7 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { app } from 'electron'
-import type { Completion } from '../shared/types'
+import type { Completion, TopSite } from '../shared/types'
 
 let db: DatabaseSync | null = null
 let upsertVisit: StatementSync
@@ -51,6 +51,46 @@ export function recordVisit(url: string, title: string): void {
 
 export function updateTitle(url: string, title: string): void {
   if (db) setTitle.run(title, url)
+}
+
+export function topSites(limit = 8): TopSite[] {
+  if (!db) return []
+  return db
+    .prepare('SELECT url, title FROM visits ORDER BY visit_count DESC, last_visit DESC LIMIT ?')
+    .all(limit) as TopSite[]
+}
+
+export type ImportedVisit = { url: string; title: string; visitCount: number; lastVisit: number }
+
+export function importVisits(visits: ImportedVisit[]): number {
+  if (!db) return 0
+  const insert = db.prepare(`
+    INSERT INTO visits (url, bare, title, visit_count, last_visit) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (url) DO UPDATE SET
+      visit_count = visit_count + excluded.visit_count,
+      last_visit = MAX(last_visit, excluded.last_visit),
+      title = CASE WHEN title = '' THEN excluded.title ELSE title END
+  `)
+  let count = 0
+  db.exec('BEGIN')
+  try {
+    for (const visit of visits) {
+      if (!/^https?:/i.test(visit.url)) continue
+      insert.run(
+        visit.url,
+        bareUrl(visit.url),
+        visit.title,
+        Math.max(1, visit.visitCount),
+        visit.lastVisit
+      )
+      count++
+    }
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+  return count
 }
 
 export function completeHistory(text: string): Completion | null {

@@ -1,0 +1,223 @@
+import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { extname, join } from 'node:path'
+import { promisify } from 'node:util'
+import { BrowserWindow, dialog, net, session } from 'electron'
+import type { ExtensionInfo } from '../shared/types'
+import { crxToZip } from './crx'
+import { broadcast } from './ipc'
+import { log } from './logger'
+import { dataPath, readJson, writeJson } from './store'
+
+type Installed = { id: string; dir: string; enabled: boolean }
+type Manifest = Record<string, unknown> & {
+  name?: string
+  version?: string
+  description?: string
+  default_locale?: string
+  icons?: Record<string, string>
+  action?: { default_popup?: string }
+  browser_action?: { default_popup?: string }
+  options_page?: string
+  options_ui?: { page?: string }
+}
+
+const FILE = 'extensions.json'
+const STORE_ID = /[a-p]{32}/
+const TAR = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+const extensions = () => session.defaultSession.extensions
+let installed: Installed[] = []
+
+function save(): void {
+  writeJson(FILE, installed)
+  broadcast('extensions:changed', listExtensions())
+}
+
+function readManifest(dir: string): Manifest {
+  return JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8').replace(/^\uFEFF/, ''))
+}
+
+function localize(dir: string, manifest: Manifest, value = ''): string {
+  const match = /^__MSG_(\w+)__$/.exec(value)
+  if (!match) return value
+  try {
+    const file = join(dir, '_locales', manifest.default_locale ?? 'en', 'messages.json')
+    const messages = JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))
+    const key = Object.keys(messages).find((name) => name.toLowerCase() === match[1].toLowerCase())
+    return key ? messages[key].message : value
+  } catch {
+    return value
+  }
+}
+
+function iconDataUrl(dir: string, icons: Record<string, string> = {}): string {
+  const largest = Object.entries(icons).sort(([a], [b]) => Number(b) - Number(a))[0]
+  if (!largest) return ''
+  try {
+    const file = join(dir, largest[1])
+    const mime = extname(file).toLowerCase() === '.svg' ? 'image/svg+xml' : 'image/png'
+    return `data:${mime};base64,${readFileSync(file).toString('base64')}`
+  } catch {
+    return ''
+  }
+}
+
+function info(entry: Installed): ExtensionInfo {
+  const manifest = readManifest(entry.dir)
+  const options = manifest.options_ui?.page ?? manifest.options_page
+  return {
+    id: entry.id,
+    name: localize(entry.dir, manifest, manifest.name) || 'Unnamed extension',
+    version: manifest.version ?? '',
+    description: localize(entry.dir, manifest, manifest.description),
+    enabled: entry.enabled,
+    icon: iconDataUrl(entry.dir, manifest.icons),
+    hasPopup: !!(manifest.action?.default_popup ?? manifest.browser_action?.default_popup),
+    optionsUrl: options ? `chrome-extension://${entry.id}/${options.replace(/^\//, '')}` : ''
+  }
+}
+
+export function listExtensions(): ExtensionInfo[] {
+  return installed.flatMap((entry) => {
+    try {
+      return [info(entry)]
+    } catch {
+      return []
+    }
+  })
+}
+
+async function activate(entry: Installed): Promise<void> {
+  const extension = await extensions().loadExtension(entry.dir, { allowFileAccess: false })
+  entry.id = extension.id
+}
+
+export async function loadExtensions(): Promise<void> {
+  installed = readJson<Installed[]>(FILE, [])
+  for (const entry of installed.filter((item) => item.enabled)) {
+    await activate(entry).catch((error: Error) =>
+      log('error', 'extensions', `Extension failed to load: ${error.message}`)
+    )
+  }
+}
+
+async function install(dir: string): Promise<ExtensionInfo> {
+  readManifest(dir)
+  const entry: Installed = { id: '', dir, enabled: true }
+  try {
+    await activate(entry)
+  } catch (error) {
+    rmSync(dir, { recursive: true, force: true })
+    throw error
+  }
+  const previous = installed.find((item) => item.id === entry.id)
+  if (previous) {
+    installed = installed.filter((item) => item !== previous)
+    if (previous.dir !== dir) rmSync(previous.dir, { recursive: true, force: true })
+  }
+  installed.push(entry)
+  save()
+  return info(entry)
+}
+
+export async function installFromFolder(win: BrowserWindow): Promise<ExtensionInfo | null> {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Select extension folder',
+    properties: ['openDirectory']
+  })
+  const source = result.filePaths[0]
+  if (result.canceled || !source) return null
+  if (!existsSync(join(source, 'manifest.json')))
+    throw new Error('The selected folder has no manifest.json')
+  const dir = join(dataPath('extensions'), randomUUID())
+  mkdirSync(dir, { recursive: true })
+  cpSync(source, dir, { recursive: true })
+  return install(dir)
+}
+
+export async function installFromStore(input: string): Promise<ExtensionInfo> {
+  const id = STORE_ID.exec(input)?.[0]
+  if (!id) throw new Error('Enter a Chrome Web Store link or extension ID')
+  const url =
+    'https://clients2.google.com/service/update2/crx?response=redirect' +
+    `&prodversion=${process.versions.chrome}&acceptformat=crx2,crx3&x=id%3D${id}%26uc`
+  const response = await net.fetch(url)
+  if (!response.ok) throw new Error('Extension could not be downloaded')
+  const zip = crxToZip(Buffer.from(await response.arrayBuffer()))
+  const root = dataPath('extensions')
+  const dir = join(root, `${id}-${randomUUID()}`)
+  const zipPath = `${dir}.zip`
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(zipPath, zip)
+  try {
+    // Windows bsdtar refuses absolute paths and ".." entries by default, which blocks zip-slip.
+    await promisify(execFile)(TAR, ['-xf', zipPath, '-C', dir])
+  } catch {
+    rmSync(dir, { recursive: true, force: true })
+    throw new Error('Extension package could not be extracted')
+  } finally {
+    rmSync(zipPath, { force: true })
+  }
+  return install(dir)
+}
+
+function entry(id: string): Installed {
+  const found = installed.find((item) => item.id === id)
+  if (!found) throw new TypeError('Extension not found')
+  return found
+}
+
+export async function setExtensionEnabled(id: string, enabled: boolean): Promise<void> {
+  const item = entry(id)
+  if (enabled && !item.enabled) await activate(item)
+  if (!enabled && item.enabled) extensions().removeExtension(id)
+  item.enabled = enabled
+  save()
+}
+
+export function removeExtension(id: string): void {
+  const item = entry(id)
+  if (item.enabled) extensions().removeExtension(id)
+  rmSync(item.dir, { recursive: true, force: true })
+  installed = installed.filter((other) => other !== item)
+  save()
+}
+
+export function extensionOptionsUrl(id: string): string {
+  return info(entry(id)).optionsUrl
+}
+
+export function openExtensionPopup(win: BrowserWindow, id: string, x: number, y: number): void {
+  const item = entry(id)
+  const manifest = readManifest(item.dir)
+  const page = manifest.action?.default_popup ?? manifest.browser_action?.default_popup
+  if (!page || !item.enabled) return
+  const bounds = win.getContentBounds()
+  const popup = new BrowserWindow({
+    parent: win,
+    x: Math.round(bounds.x + x),
+    y: Math.round(bounds.y + y),
+    width: 360,
+    height: 480,
+    frame: false,
+    resizable: false,
+    show: false,
+    skipTaskbar: true,
+    backgroundColor: '#ffffff',
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
+  })
+  popup.on('blur', () => popup.close())
+  popup.webContents.once('did-finish-load', async () => {
+    const [width, height] = (await popup.webContents
+      .executeJavaScript(
+        '[document.documentElement.scrollWidth, document.documentElement.scrollHeight]'
+      )
+      .catch(() => [360, 480])) as number[]
+    if (popup.isDestroyed()) return
+    popup.setContentSize(Math.min(Math.max(width, 120), 800), Math.min(Math.max(height, 40), 600))
+    popup.setPosition(Math.round(bounds.x + x - popup.getSize()[0]), Math.round(bounds.y + y))
+    popup.show()
+  })
+  popup.loadURL(`chrome-extension://${id}/${page.replace(/^\//, '')}`).catch(() => popup.close())
+}

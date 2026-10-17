@@ -1,0 +1,43 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.stat {
+  padding: var(--space-4) var(--space-6);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.perf-head {
+  display: flex;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-2);
+}
+
+.perf-head > :first-child {
+  flex: 1;
+}
+
+.perf-cell {
+  width: 90px;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.perf-action {
+  width: 76px;
+}
+
+.row.sleeping .row-title {
+  color: var(--text-muted);
+}
