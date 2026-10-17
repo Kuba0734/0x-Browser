@@ -80,6 +80,10 @@ export class TabManager {
     return this.tabs.some((tab) => tab.view?.webContents === contents)
   }
 
+  get contentTop(): number {
+    return this.chromeHeight
+  }
+
   get size(): number {
     return this.tabs.length
   }

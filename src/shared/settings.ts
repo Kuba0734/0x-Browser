@@ -32,6 +32,7 @@ export type Settings = {
   searchEngine: SearchEngine
   searchSuggestions: boolean
   showBookmarkBar: boolean
+  showMostVisited: boolean
   reducedMotion: boolean
   forceDarkWeb: boolean
   sleepAfterMinutes: number
@@ -44,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searchEngine: 'google',
   searchSuggestions: true,
   showBookmarkBar: true,
+  showMostVisited: true,
   reducedMotion: false,
   forceDarkWeb: true,
   sleepAfterMinutes: 3,

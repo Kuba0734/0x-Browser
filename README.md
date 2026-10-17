@@ -20,6 +20,7 @@
 - **Tabs & navigation** – tabs, back/forward/reload, address bar with search and inline history completion
 - **Tabs that stay** – open tabs and windows are restored after a restart, inactive ones load on demand
 - **Drag tabs** – reorder tabs by dragging, drag a tab out of the tab strip to open it in a new window
+- **Site permissions** – sites ask before using your camera, microphone, location or notifications, your choices can be changed in Settings
 - **Context menu** – right-click for links, images, selected text, input fields and Inspect
 - **Home tab** – search, quick access to every browser page and your most visited sites
 - **Bookmarks** – star any page, folders, a bookmarks bar that appears once you have bookmarks
@@ -78,7 +79,7 @@ Updates are checked on every start. When a new version is ready, a green update 
 - Windows only.
 - Not every Chrome extension API is available, so some extensions only work partially.
 - Cookies can only be imported from Firefox. Chromium-based browsers encrypt their cookies so other apps cannot read them.
-- Website permission requests (camera, microphone, location, notifications) are currently always denied.
+- Screen sharing is not supported yet.
 
 ## Development
 

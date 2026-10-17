@@ -44,6 +44,43 @@ if (location.protocol === 'https:' || location.protocol === 'http:') {
   })
 }
 
+// Electron reports permissions the user has not decided yet as "denied", which stops sites from ever
+// asking. Report them as "default"/"prompt" like Chrome; requests then reach the permission prompt.
+if (location.protocol === 'https:' || location.protocol === 'http:') {
+  const undecided = ipcRenderer.sendSync('permissions:undecided') as string[]
+  contextBridge.executeInMainWorld({
+    func: (names: string[]) => {
+      const pending = new Set(names)
+      const notification = Object.getOwnPropertyDescriptor(Notification, 'permission')
+      const readNotification = notification?.get
+      if (readNotification && pending.has('notifications'))
+        Object.defineProperty(Notification, 'permission', {
+          configurable: true,
+          get: () => {
+            const value = readNotification.call(Notification)
+            return value === 'denied' ? 'default' : value
+          }
+        })
+      const query = navigator.permissions?.query.bind(navigator.permissions)
+      if (!query) return
+      navigator.permissions.query = (descriptor: PermissionDescriptor) =>
+        query(descriptor).then((status) =>
+          status.state === 'denied' && pending.has(descriptor.name)
+            ? ({
+                name: descriptor.name,
+                state: 'prompt',
+                onchange: null,
+                addEventListener: () => undefined,
+                removeEventListener: () => undefined,
+                dispatchEvent: () => true
+              } as unknown as PermissionStatus)
+            : status
+        )
+    },
+    args: [undecided]
+  })
+}
+
 // Google sign-in gets a Firefox user agent (see main/compat.ts); Firefox has no userAgentData,
 // so the Chromium client hints must not leak through JavaScript either.
 if (location.hostname === 'accounts.google.com') {

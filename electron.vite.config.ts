@@ -23,6 +23,7 @@ export default defineConfig({
           ui: resolve('src/ui/index.html'),
           splash: resolve('src/splash/index.html'),
           suggest: resolve('src/suggest/index.html'),
+          prompt: resolve('src/prompt/index.html'),
           ...Object.fromEntries(
             PAGES.map((page) => [page, resolve(`src/pages/${page}/index.html`)])
           )

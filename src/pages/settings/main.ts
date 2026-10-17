@@ -7,6 +7,13 @@ import {
 } from '../../shared/settings'
 import type { InternalPage } from '../../shared/client'
 import type { IconName } from '../../shared/icons'
+import {
+  PERMISSION_NAMES,
+  PERMISSIONS,
+  type Decision,
+  type PermissionKey,
+  type SitePermissions
+} from '../../shared/permissions'
 import type { ImportSource, UpdateState } from '../../shared/types'
 import { api, errorMessage, h, initPage, reveal, toast } from '../shared/kit'
 import './settings.css'
@@ -45,6 +52,7 @@ function toggle(
     | 'askDownloadLocation'
     | 'forceDarkWeb'
     | 'searchSuggestions'
+    | 'showMostVisited'
 ): HTMLInputElement {
   const input = h('input', {
     class: 'switch',
@@ -273,6 +281,81 @@ function about(): HTMLElement {
   )
 }
 
+function sitePermissions(): HTMLElement {
+  const host = h('div', {}, h('div', { class: 'skeleton' }))
+  const control = (origin: string, key: PermissionKey, value: Decision) => {
+    const input = h(
+      'select',
+      {
+        class: 'input permission-select',
+        'aria-label': `${PERMISSION_NAMES[key]} for ${origin}`,
+        onchange: () =>
+          api.permissions.set(origin, key, input.value === 'ask' ? null : (input.value as Decision))
+      },
+      h('option', { value: 'allow', text: 'Allow', selected: value === 'allow' }),
+      h('option', { value: 'block', text: 'Block', selected: value === 'block' }),
+      h('option', { value: 'ask', text: 'Ask' })
+    )
+    return h(
+      'label',
+      { class: 'site-permission', title: PERMISSIONS[key] },
+      h('span', { class: 'faint', text: PERMISSION_NAMES[key] }),
+      input
+    )
+  }
+  const render = (sites: SitePermissions[]) => {
+    host.replaceChildren(
+      sites.length
+        ? h(
+            'div',
+            { class: 'card' },
+            ...sites.map((site) =>
+              h(
+                'div',
+                { class: 'row setting site-row' },
+                h(
+                  'div',
+                  { class: 'row-main' },
+                  h('div', { text: new URL(site.origin).host }),
+                  h('div', { class: 'row-sub', text: site.origin })
+                ),
+                h(
+                  'div',
+                  { class: 'site-controls' },
+                  ...Object.entries(site.permissions).map(([key, value]) =>
+                    control(site.origin, key as PermissionKey, value)
+                  ),
+                  h('button', {
+                    class: 'icon-btn danger',
+                    icon: 'trash',
+                    title: 'Reset permissions for this site',
+                    'aria-label': `Reset permissions for ${site.origin}`,
+                    onclick: () => api.permissions.clearSite(site.origin)
+                  })
+                )
+              )
+            )
+          )
+        : h(
+            'div',
+            { class: 'card' },
+            h(
+              'div',
+              { class: 'row setting' },
+              h('div', {
+                class: 'row-main muted',
+                text: 'Sites that ask for your camera, microphone, location or notifications appear here.'
+              })
+            )
+          )
+    )
+    filterSettings()
+  }
+  api.permissions.list().then(render)
+  api.permissions.onChange(render)
+  return host
+}
+
 const importHost = h('div', {}, h('div', { class: 'skeleton' }))
 
 const LINKS: [InternalPage, string, IconName][] = [
@@ -348,6 +431,11 @@ page.append(
         'Shows suggestions while you type. What you type is sent to your search engine.',
         toggle('searchSuggestions')
       ),
+      setting(
+        'Show most visited sites',
+        'Shortcuts to your most visited sites on the home page',
+        toggle('showMostVisited')
+      ),
       setting('Show bookmarks bar', 'Appears once you have bookmarks', toggle('showBookmarkBar')),
       setting(
         'Dark mode for websites',
@@ -371,6 +459,10 @@ page.append(
       ),
       setting('Download folder', 'Where downloaded files are saved', downloadFolder())
     )
+  ),
+  section(
+    h('h2', { class: 'section-title', id: 'permissions', text: 'Site permissions' }),
+    sitePermissions()
   ),
   section(h('h2', { class: 'section-title', id: 'import', text: 'Import data' }), importHost),
   section(

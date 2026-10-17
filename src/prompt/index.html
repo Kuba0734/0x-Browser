@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'"
+    />
+    <title>Permission request</title>
+    <link rel="stylesheet" href="../ui/tokens.css" />
+    <link rel="stylesheet" href="./prompt.css" />
+  </head>
+  <body>
+    <section id="card" role="dialog" aria-labelledby="title" hidden>
+      <h1 id="title"></h1>
+      <ul id="permissions"></ul>
+      <div class="actions">
+        <button id="block" class="btn">Block</button>
+        <button id="allow" class="btn primary">Allow</button>
+      </div>
+    </section>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

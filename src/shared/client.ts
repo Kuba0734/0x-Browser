@@ -1,3 +1,4 @@
+import type { Decision, PermissionKey, SitePermissions } from './permissions'
 import type { Settings } from './settings'
 import type {
   BookmarkNode,
@@ -137,6 +138,13 @@ export const api = {
     check: () => send('update:check'),
     install: () => send('update:install'),
     onChange: on<UpdateState>('update:changed')
+  },
+  permissions: {
+    list: () => invoke<SitePermissions[]>('permissions:list'),
+    set: (origin: string, key: PermissionKey, value: Decision | null) =>
+      invoke<void>('permissions:set', origin, key, value),
+    clearSite: (origin: string) => invoke<void>('permissions:clear-site', origin),
+    onChange: on<SitePermissions[]>('permissions:changed')
   },
   importer: {
     sources: () => invoke<ImportSource[]>('import:sources'),

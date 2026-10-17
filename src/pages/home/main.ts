@@ -54,6 +54,9 @@ initPage()
 reveal(page.querySelectorAll('.home-tile'))
 search.focus()
 
+api.settings.get().then((settings) => (sites.hidden = !settings.showMostVisited))
+api.settings.onChange((settings) => (sites.hidden = !settings.showMostVisited))
+
 Promise.all([api.history.top(), loadFavicons()]).then(([top, faviconFor]) => {
   if (!top.length) return
   sites.append(

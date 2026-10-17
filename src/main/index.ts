@@ -67,6 +67,15 @@ import {
 } from './menus'
 import { perfSnapshot } from './performance'
 import {
+  answerPrompt,
+  clearSite,
+  initPermissions,
+  listPermissions,
+  loadPermissions,
+  setPermission,
+  type PromptPresenter
+} from './permissions'
+import {
   flushSettings,
   getSettings,
   loadSettings,
@@ -80,12 +89,12 @@ import { checkForUpdates, initUpdater, installUpdate, updateState } from './upda
 import { internalUrl, isInternalUrl, isWebUrl, resolveInput } from './url'
 
 const TABSTRIP_HEIGHT = 40
-const ALLOWED_PERMISSIONS = new Set(['fullscreen', 'clipboard-sanitized-write'])
 const APP_ICON = join(app.getAppPath(), 'assets', 'icons', 'app.ico')
 
 process.on('uncaughtException', (error) => log('error', 'main', error.stack ?? String(error)))
 
 app.enableSandbox()
+app.setAppUserModelId('com.kuba0734.0xbrowser')
 app.userAgentFallback = app.userAgentFallback
   .replace(/ Electron\/\S+/, '')
   .replace(/ \S+\/[\d.]+(?= Chrome\/)/, '')
@@ -129,7 +138,12 @@ function createSplash(): BrowserWindow {
   return splash
 }
 
-type AppWindow = { win: BrowserWindow; tabs: TabManager; suggest: WebContentsView }
+type AppWindow = {
+  win: BrowserWindow
+  tabs: TabManager
+  suggest: WebContentsView
+  prompt: WebContentsView
+}
 
 const SESSION_FILE = 'session.json'
 const windows = new Set<AppWindow>()
@@ -169,6 +183,7 @@ function windowFor(sender: WebContents): AppWindow {
     if (
       entry.win.webContents === sender ||
       entry.suggest.webContents === sender ||
+      entry.prompt.webContents === sender ||
       entry.tabs.owns(sender)
     )
       return entry
@@ -182,7 +197,7 @@ function windowForTab(id: number): AppWindow | undefined {
   return [...windows].find((entry) => entry.tabs.has(id))
 }
 
-function createSuggestView(): WebContentsView {
+function createOverlayView(page: string): WebContentsView {
   const view = new WebContentsView({
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -195,8 +210,32 @@ function createSuggestView(): WebContentsView {
   view.setBackgroundColor('#00000000')
   view.setVisible(false)
   addUi(view.webContents)
-  view.webContents.loadURL(rendererUrl('suggest/index.html'))
+  view.webContents.loadURL(rendererUrl(page))
   return view
+}
+
+const PROMPT_WIDTH = 360
+const PROMPT_LEFT = 96
+
+function presenterFor(contents: WebContents): PromptPresenter | null {
+  const entry = [...windows].find((candidate) => candidate.tabs.owns(contents))
+  if (!entry) return null
+  const { win, prompt, tabs } = entry
+  return {
+    key: entry,
+    show: (request) => {
+      prompt.setBounds({
+        x: PROMPT_LEFT,
+        y: tabs.contentTop,
+        width: PROMPT_WIDTH,
+        height: 120 + request.permissions.length * 28
+      })
+      win.contentView.addChildView(prompt)
+      prompt.setVisible(true)
+      prompt.webContents.send('prompt:show', request)
+    },
+    hide: () => prompt.setVisible(false)
+  }
 }
 
 type WindowOptions = { saved?: SavedWindow; tab?: Tab; url?: string; x?: number; y?: number }
@@ -228,16 +267,21 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
   const tabs: TabManager = new TabManager(win, {
     onChange: (state) => {
       if (!ui.isDestroyed()) ui.send('tabs:state', state)
+      // New tab views stack above existing children, so visible overlays are raised again.
+      for (const overlay of [suggest, prompt])
+        if (overlay.getVisible()) win.contentView.addChildView(overlay)
       saveSession()
     },
     onInput: (event, input) => handleShortcut(tabs, ui, event, input),
     canCloseWindow: () => windows.size > 1,
     onContextMenu: (contents, params) => popupPageMenu(win, tabs, contents, params)
   })
-  const suggest = createSuggestView()
+  const suggest = createOverlayView('suggest/index.html')
+  const prompt = createOverlayView('prompt/index.html')
   win.contentView.addChildView(suggest)
+  win.contentView.addChildView(prompt)
   win.on('resize', () => suggest.setVisible(false))
-  const entry: AppWindow = { win, tabs, suggest }
+  const entry: AppWindow = { win, tabs, suggest, prompt }
   windows.add(entry)
 
   ui.on('will-navigate', (event) => event.preventDefault())
@@ -251,6 +295,7 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
   })
   win.on('closed', () => {
     suggest.webContents.close()
+    prompt.webContents.close()
     windows.delete(entry)
     tabs.destroyAll()
     saveSession()
@@ -377,6 +422,12 @@ function registerIpc(): void {
     suggest.webContents.send('suggest:items', { items, selected: Number(selected) })
   })
   listen('suggest:hide', (sender) => windowFor(sender).suggest.setVisible(false))
+  listen('permission:answer', (_sender, id, allowed) => answerPrompt(str(id), bool(allowed)))
+  handle('permissions:list', () => listPermissions())
+  handle('permissions:set', (_sender, origin, key, value) =>
+    setPermission(str(origin), str(key), value === 'allow' || value === 'block' ? value : null)
+  )
+  handle('permissions:clear-site', (_sender, origin) => clearSite(str(origin)))
   listen('suggest:pick', (sender, index) => {
     const { win } = windowFor(sender)
     win.webContents.send('suggest:picked', int(index))
@@ -489,17 +540,13 @@ function registerIpc(): void {
 
 app.whenReady().then(async () => {
   const splash = createSplash()
-  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
-    callback(ALLOWED_PERMISSIONS.has(permission))
-  )
-  session.defaultSession.setPermissionCheckHandler((_contents, permission) =>
-    ALLOWED_PERMISSIONS.has(permission)
-  )
   registerInternalProtocol()
   registerIpc()
   openHistory()
   loadBookmarks()
   loadFavicons()
+  loadPermissions()
+  initPermissions(session.defaultSession, presenterFor)
   loadDownloads()
   initDownloads(session.defaultSession)
   initCompat(session.defaultSession)

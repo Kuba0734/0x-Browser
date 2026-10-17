@@ -104,3 +104,26 @@ select.setting-select {
 .settings-search + .empty {
   margin-top: var(--space-6);
 }
+
+.site-row {
+  flex-wrap: wrap;
+}
+
+.site-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.site-permission {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+select.permission-select {
+  width: auto;
+  height: 30px;
+}
