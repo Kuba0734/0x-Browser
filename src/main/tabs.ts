@@ -78,15 +78,13 @@ export class TabManager {
   close(id: number): void {
     const index = this.tabs.findIndex((tab) => tab.id === id)
     if (index === -1) return
-    const [tab] = this.tabs.splice(index, 1)
-    this.destroyView(tab)
+    const tab = this.tabs[index]
+    if (this.tabs.length === 1) this.create()
+    else if (id === this.activeId) this.activate((this.tabs[index + 1] ?? this.tabs[index - 1]).id)
+    this.tabs.splice(this.tabs.indexOf(tab), 1)
     clearTimeout(tab.sleepTimer)
-    if (this.tabs.length === 0) {
-      this.create()
-      return
-    }
-    if (id === this.activeId) this.activate(this.tabs[Math.min(index, this.tabs.length - 1)].id)
-    else this.emit()
+    this.destroyView(tab)
+    this.emit()
   }
 
   closeActive(): void {

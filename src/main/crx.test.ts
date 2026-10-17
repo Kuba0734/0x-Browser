@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { crxToZip } from './crx.ts'
+import { crxPublicKeys, crxToZip, extensionId } from './crx.ts'
 
 const header = (...values: number[]) => {
   const buffer = Buffer.alloc(4 + values.length * 4)
@@ -24,4 +24,19 @@ test('crxToZip rejects bad input', () => {
   assert.throws(() => crxToZip(Buffer.from('not a crx file')))
   assert.throws(() => crxToZip(Buffer.concat([header(4, 0), zip])))
   assert.throws(() => crxToZip(Buffer.concat([header(3, 999), zip])))
+})
+
+test('crxPublicKeys reads keys from a CRX3 header', () => {
+  const key = Buffer.from('public-key-bytes')
+  const proof = Buffer.concat([Buffer.from([0x0a, key.length]), key, Buffer.from([0x12, 1, 0])])
+  const signedData = Buffer.from([0x82, 0xf1, 0x04, 2, 9, 9])
+  const headerBody = Buffer.concat([Buffer.from([0x12, proof.length]), proof, signedData])
+  const crx = Buffer.concat([header(3, headerBody.length), headerBody, zip])
+  assert.deepEqual(crxPublicKeys(crx), [key])
+  assert.deepEqual(crxToZip(crx), zip)
+})
+
+test('extensionId maps the key hash to letters a-p', () => {
+  const id = extensionId(Buffer.from('key'))
+  assert.match(id, /^[a-p]{32}$/)
 })

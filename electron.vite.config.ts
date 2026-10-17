@@ -5,7 +5,16 @@ const PAGES = ['home', 'bookmarks', 'downloads', 'settings', 'extensions', 'perf
 
 export default defineConfig({
   main: {},
-  preload: {},
+  preload: {
+    build: {
+      rolldownOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          'service-worker': resolve('src/preload/service-worker.ts')
+        }
+      }
+    }
+  },
   renderer: {
     root: 'src',
     build: {

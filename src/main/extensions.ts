@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { BrowserWindow, dialog, net, session } from 'electron'
 import type { ExtensionInfo } from '../shared/types'
-import { crxToZip } from './crx'
+import { crxPublicKeys, crxToZip, extensionId } from './crx'
 import { broadcast } from './ipc'
 import { log } from './logger'
 import { dataPath, readJson, writeJson } from './store'
@@ -130,7 +130,11 @@ export async function installFromFolder(win: BrowserWindow): Promise<ExtensionIn
   if (result.canceled || !source) return null
   if (!existsSync(join(source, 'manifest.json')))
     throw new Error('The selected folder has no manifest.json')
-  const dir = join(dataPath('extensions'), randomUUID())
+  // The ID of an unpacked extension derives from its path, so a stable folder per source keeps the
+  // ID (and the extension's stored data) across reinstalls.
+  const hash = createHash('sha256').update(source.toLowerCase()).digest('hex').slice(0, 16)
+  const dir = join(dataPath('extensions'), `local-${hash}`)
+  rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
   cpSync(source, dir, { recursive: true })
   return install(dir)
@@ -144,7 +148,8 @@ export async function installFromStore(input: string): Promise<ExtensionInfo> {
     `&prodversion=${process.versions.chrome}&acceptformat=crx2,crx3&x=id%3D${id}%26uc`
   const response = await net.fetch(url)
   if (!response.ok) throw new Error('Extension could not be downloaded')
-  const zip = crxToZip(Buffer.from(await response.arrayBuffer()))
+  const crx = Buffer.from(await response.arrayBuffer())
+  const zip = crxToZip(crx)
   const root = dataPath('extensions')
   const dir = join(root, `${id}-${randomUUID()}`)
   const zipPath = `${dir}.zip`
@@ -158,6 +163,14 @@ export async function installFromStore(input: string): Promise<ExtensionInfo> {
     throw new Error('Extension package could not be extracted')
   } finally {
     rmSync(zipPath, { force: true })
+  }
+  // Store packages carry their public key only in the CRX header; without it in the manifest
+  // the extension would get a path-based ID instead of its real store ID.
+  const manifest = readManifest(dir)
+  const key = crxPublicKeys(crx).find((candidate) => extensionId(candidate) === id)
+  if (!manifest.key && key) {
+    manifest.key = key.toString('base64')
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2))
   }
   return install(dir)
 }

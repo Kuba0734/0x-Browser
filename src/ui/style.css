@@ -57,6 +57,7 @@ svg {
 }
 
 #tabs {
+  position: relative;
   display: flex;
   gap: var(--space-1);
   min-width: 0;
@@ -346,6 +347,45 @@ svg {
 #update-button {
   color: var(--success);
   animation: pop var(--duration-slow) var(--ease);
+}
+
+.store-install {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  app-region: no-drag;
+  animation: fade-in var(--duration-base) var(--ease) both;
+  transition:
+    transform var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    opacity var(--duration-fast) var(--ease);
+}
+
+.store-install svg {
+  width: 14px;
+  height: 14px;
+}
+
+.store-install:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 14px var(--accent-glow);
+}
+
+.store-install:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.store-install:disabled {
+  opacity: 0.6;
 }
 
 #extension-actions {

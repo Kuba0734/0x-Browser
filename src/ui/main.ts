@@ -27,10 +27,14 @@ const downloadsButton = byId<HTMLButtonElement>('downloads-button')
 const downloadProgress = downloadsButton.querySelector('.download-progress > span') as HTMLElement
 const extensionActions = byId('extension-actions')
 const updateButton = byId<HTMLButtonElement>('update-button')
+const storeButton = byId<HTMLButtonElement>('store-install')
+const storeLabel = storeButton.querySelector('.store-label') as HTMLElement
 
 const INTERNAL = 'ox://'
 const HOME = 'ox://home/'
 const sessionStart = Date.now()
+const STORE_DETAIL =
+  /^https:\/\/(?:chromewebstore\.google\.com\/detail|chrome\.google\.com\/webstore\/detail)\/(?:[^/?#]+\/)?([a-p]{32})/
 
 const tabEls = new Map<number, HTMLElement>()
 let state: BrowserState = { tabs: [], activeId: -1 }
@@ -38,6 +42,8 @@ let completion: (Completion & { shown: string }) | null = null
 let bookmarkedUrls = new Set<string>()
 let barNodes: BookmarkNode[] = []
 let showBar = false
+let installedIds = new Set<string>()
+let storeBusy = false
 
 for (const el of document.querySelectorAll<HTMLElement>('[data-icon]'))
   el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon as IconName))
@@ -64,11 +70,11 @@ function createTabEl(id: number): HTMLElement {
     if (event.button === 0) api.tabs.activate(id)
   })
   el.addEventListener('auxclick', (event) => {
-    if (event.button === 1) api.tabs.close(id)
+    if (event.button === 1) closeTab(id)
   })
   const close = el.querySelector('.tab-close') as HTMLButtonElement
   close.addEventListener('mousedown', (event) => event.stopPropagation())
-  close.addEventListener('click', () => api.tabs.close(id))
+  close.addEventListener('click', () => closeTab(id))
   const img = el.querySelector('img') as HTMLImageElement
   img.addEventListener('error', () => {
     img.hidden = true
@@ -102,23 +108,67 @@ function updateTabEl(el: HTMLElement, tab: TabState): void {
   }
 }
 
-function renderTabs(): void {
-  const ids = new Set(state.tabs.map((tab) => tab.id))
+function flipTabs(change: () => void): void {
+  const before = new Map([...tabEls].map(([id, el]) => [id, el.getBoundingClientRect().left]))
+  change()
+  const style = getComputedStyle(document.documentElement)
+  const duration = parseFloat(style.getPropertyValue('--duration-base')) || 0
+  const easing = style.getPropertyValue('--ease').trim()
   for (const [id, el] of tabEls) {
-    if (ids.has(id)) continue
-    tabEls.delete(id)
-    el.classList.add('leaving')
-    el.addEventListener('animationend', () => el.remove(), { once: true })
+    const left = before.get(id)
+    if (left === undefined) continue
+    const dx = left - el.getBoundingClientRect().left
+    if (Math.abs(dx) < 1) continue
+    el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration, easing })
   }
-  for (const tab of state.tabs) {
-    let el = tabEls.get(tab.id)
-    if (!el) {
-      el = createTabEl(tab.id)
-      tabEls.set(tab.id, el)
-      tabsEl.append(el)
+}
+
+let tabWidthsLocked = false
+
+function lockTabWidths(): void {
+  if (tabWidthsLocked) return
+  tabWidthsLocked = true
+  for (const el of tabEls.values()) el.style.flex = `0 0 ${el.offsetWidth}px`
+}
+
+function unlockTabWidths(): void {
+  if (!tabWidthsLocked) return
+  tabWidthsLocked = false
+  flipTabs(() => {
+    for (const el of tabEls.values()) el.style.flex = ''
+  })
+}
+
+function closeTab(id: number): void {
+  lockTabWidths()
+  api.tabs.close(id)
+}
+
+function renderTabs(): void {
+  flipTabs(() => {
+    const ids = new Set(state.tabs.map((tab) => tab.id))
+    for (const [id, el] of tabEls) {
+      if (ids.has(id)) continue
+      tabEls.delete(id)
+      const { offsetLeft, offsetWidth } = el
+      Object.assign(el.style, {
+        position: 'absolute',
+        left: `${offsetLeft}px`,
+        width: `${offsetWidth}px`
+      })
+      el.classList.add('leaving')
+      el.addEventListener('animationend', () => el.remove(), { once: true })
     }
-    updateTabEl(el, tab)
-  }
+    for (const tab of state.tabs) {
+      let el = tabEls.get(tab.id)
+      if (!el) {
+        el = createTabEl(tab.id)
+        tabEls.set(tab.id, el)
+        tabsEl.append(el)
+      }
+      updateTabEl(el, tab)
+    }
+  })
 }
 
 function renderStar(): void {
@@ -129,6 +179,15 @@ function renderStar(): void {
   starButton.classList.toggle('active', bookmarked)
   starButton.setAttribute('aria-pressed', String(bookmarked))
   starButton.title = bookmarked ? 'Remove bookmark' : 'Bookmark this page'
+}
+
+function renderStoreButton(): void {
+  const id = STORE_DETAIL.exec(activeTab()?.url ?? '')?.[1]
+  storeButton.hidden = !id || installedIds.has(id)
+  storeButton.dataset.id = id ?? ''
+  if (storeBusy) return
+  storeButton.disabled = false
+  storeLabel.textContent = 'Add to 0x'
 }
 
 function renderToolbar(activeChanged: boolean): void {
@@ -145,6 +204,7 @@ function renderToolbar(activeChanged: boolean): void {
   }
   if (activeChanged && tab?.url === HOME) address.focus()
   renderStar()
+  renderStoreButton()
 }
 
 function collectUrls(node: BookmarkNode, urls: Set<string>): Set<string> {
@@ -213,6 +273,8 @@ function applyDownloads(list: DownloadState[]): void {
 }
 
 function applyExtensions(list: ExtensionInfo[]): void {
+  installedIds = new Set(list.map((extension) => extension.id))
+  renderStoreButton()
   extensionActions.replaceChildren(
     ...list
       .filter((extension) => extension.enabled && extension.hasPopup)
@@ -316,6 +378,7 @@ starButton.addEventListener('click', () => {
 })
 
 byId('new-tab').addEventListener('click', () => api.tabs.create())
+byId('tabstrip').addEventListener('mouseleave', unlockTabWidths)
 byId('home').addEventListener('click', () => api.nav.go('0x://home'))
 backButton.addEventListener('click', () => api.nav.back())
 forwardButton.addEventListener('click', () => api.nav.forward())
@@ -323,6 +386,22 @@ reloadButton.addEventListener('click', () =>
   activeTab()?.loading ? api.nav.stop() : api.nav.reload()
 )
 updateButton.addEventListener('click', () => api.updates.install())
+storeButton.addEventListener('click', async () => {
+  const id = storeButton.dataset.id
+  if (!id || storeBusy) return
+  storeBusy = true
+  storeButton.disabled = true
+  storeLabel.textContent = 'Installing…'
+  try {
+    await api.extensions.installStore(id)
+    storeBusy = false
+    renderStoreButton()
+  } catch {
+    storeBusy = false
+    storeButton.disabled = false
+    storeLabel.textContent = 'Install failed, retry'
+  }
+})
 downloadsButton.addEventListener('click', () => api.tabs.openInternal('downloads'))
 byId('menu-button').addEventListener('click', (event) => {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()

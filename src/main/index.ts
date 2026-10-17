@@ -65,6 +65,9 @@ const APP_ICON = join(app.getAppPath(), 'assets', 'icons', 'app.ico')
 process.on('uncaughtException', (error) => log('error', 'main', error.stack ?? String(error)))
 
 app.enableSandbox()
+app.userAgentFallback = app.userAgentFallback
+  .replace(/ Electron\/\S+/, '')
+  .replace(/ \S+\/[\d.]+(?= Chrome\/)/, '')
 nativeTheme.themeSource = 'dark'
 loadSettings()
 const forceDarkActive = getSettings().forceDarkWeb
@@ -301,6 +304,10 @@ app.whenReady().then(async () => {
   loadBookmarks()
   loadDownloads()
   initDownloads(session.defaultSession)
+  session.defaultSession.registerPreloadScript({
+    type: 'service-worker',
+    filePath: join(__dirname, '../preload/service-worker.js')
+  })
   await loadExtensions()
   const win = await createWindow()
   win.show()

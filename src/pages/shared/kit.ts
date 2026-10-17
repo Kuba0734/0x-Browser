@@ -35,23 +35,23 @@ export function fillIcons(root: ParentNode = document): void {
   }
 }
 
-const observer = new IntersectionObserver(
-  (entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue
-      entry.target.classList.add('visible')
-      observer.unobserve(entry.target)
-    }
-  },
-  { rootMargin: '0px 0px -4% 0px' }
-)
+const MAX_STAGGERED = 8
+
+const observer = new IntersectionObserver((entries) => {
+  let index = 0
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue
+    const el = entry.target as HTMLElement
+    el.style.setProperty('--index', String(Math.min(index++, MAX_STAGGERED)))
+    el.classList.add('visible')
+    observer.unobserve(el)
+  }
+})
 
 export function reveal(elements: Iterable<Element>): void {
-  let index = 0
   for (const el of elements) {
     if (el.classList.contains('reveal')) continue
     el.classList.add('reveal')
-    ;(el as HTMLElement).style.setProperty('--index', String(Math.min(index++, 10)))
     observer.observe(el)
   }
 }

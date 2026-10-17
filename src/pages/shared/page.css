@@ -113,6 +113,7 @@ p {
 }
 
 .card {
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -358,7 +359,7 @@ input[type='color'] {
 }
 
 .reveal.visible {
-  animation: reveal-in var(--duration-page) var(--ease) calc(var(--index, 0) * var(--stagger))
+  animation: reveal-in var(--duration-slow) var(--ease) calc(var(--index, 0) * var(--stagger))
     backwards;
 }
 
