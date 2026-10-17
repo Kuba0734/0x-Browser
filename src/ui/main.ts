@@ -2,6 +2,7 @@ import { api } from '../shared/client'
 import { icon, type IconName } from '../shared/icons'
 import { applySettings, SEARCH_ENGINES, type Settings } from '../shared/settings'
 import { storeTarget, type StoreTarget } from '../shared/stores'
+import { buildSuggestions } from '../shared/suggestions'
 import type {
   BookmarkNode,
   BrowserState,
@@ -501,11 +502,6 @@ address.addEventListener('mousedown', (event) => {
   address.select()
 })
 
-const looksLikeAddress = (text: string) =>
-  /^(https?|0x|ox):\/\//i.test(text) ||
-  /^[^\s/]+\.[a-z]{2,}(\/\S*)?$/i.test(text) ||
-  /^localhost(:\d+)?/i.test(text)
-
 let suggestions: Suggestion[] = []
 let selectedSuggestion = -1
 let typedText = ''
@@ -538,33 +534,7 @@ async function updateSuggestions(typed: string): Promise<void> {
   const [history, search] = await Promise.all([api.history.search(text), api.search.suggest(text)])
   if (request !== suggestRequest) return
   const engine = SEARCH_ENGINES[currentSettings?.searchEngine ?? 'google'].name
-  const isAddress = looksLikeAddress(text)
-  const items: Suggestion[] = [
-    {
-      kind: isAddress ? 'go' : 'search',
-      label: text,
-      detail: isAddress ? 'Open' : `Search with ${engine}`,
-      input: text,
-      favicon: ''
-    },
-    ...history.slice(0, 3).map((entry): Suggestion => ({
-      kind: 'history',
-      label: entry.title || displayUrl(entry.url),
-      detail: displayUrl(entry.url),
-      input: entry.url,
-      favicon: faviconFor(entry.url)
-    })),
-    ...search
-      .filter((term) => term.toLowerCase() !== text.toLowerCase())
-      .map((term): Suggestion => ({
-        kind: 'search',
-        label: term,
-        detail: '',
-        input: term,
-        favicon: ''
-      }))
-  ]
-  suggestions = items.slice(0, 8)
+  suggestions = buildSuggestions(text, engine, history, search, faviconFor, displayUrl)
   selectedSuggestion = -1
   typedText = typed
   showSuggestions()

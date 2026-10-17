@@ -152,6 +152,7 @@ type AppWindow = {
   tabs: TabManager
   suggest: WebContentsView
   prompt: WebContentsView
+  suggestOwner?: WebContents
 }
 
 const SESSION_FILE = 'session.json'
@@ -426,11 +427,14 @@ function registerIpc(): void {
   handle('search:suggest', (_sender, text) => searchSuggestions(str(text)))
   listen('suggest:show', (sender, items, selected, x, y, width) => {
     if (!Array.isArray(items) || items.length > 10) return
-    const { win, suggest } = windowFor(sender)
+    const entry = windowFor(sender)
+    const { win, suggest } = entry
+    entry.suggestOwner = sender
     const [left, top] = coords(x, y)
+    const offset = entry.tabs.owns(sender) ? entry.tabs.contentTop : 0
     suggest.setBounds({
       x: Math.round(left),
-      y: Math.round(top),
+      y: Math.round(top + offset),
       width: Math.round(Number(width) || 400),
       height: items.length * 36 + 10
     })
@@ -438,7 +442,10 @@ function registerIpc(): void {
     suggest.setVisible(true)
     suggest.webContents.send('suggest:items', { items, selected: Number(selected) })
   })
-  listen('suggest:hide', (sender) => windowFor(sender).suggest.setVisible(false))
+  listen('suggest:hide', (sender) => {
+    const entry = windowFor(sender)
+    if (!entry.suggestOwner || entry.suggestOwner === sender) entry.suggest.setVisible(false)
+  })
   listen('permission:answer', (_sender, id, allowed) => answerPrompt(str(id), bool(allowed)))
   handle('permissions:list', () => listPermissions())
   handle('permissions:set', (_sender, origin, key, value) =>
@@ -446,8 +453,9 @@ function registerIpc(): void {
   )
   handle('permissions:clear-site', (_sender, origin) => clearSite(str(origin)))
   listen('suggest:pick', (sender, index) => {
-    const { win } = windowFor(sender)
-    win.webContents.send('suggest:picked', int(index))
+    const { win, suggestOwner } = windowFor(sender)
+    const target = suggestOwner && !suggestOwner.isDestroyed() ? suggestOwner : win.webContents
+    target.send('suggest:picked', int(index))
   })
   handle('favicons:all', () => allFavicons())
 

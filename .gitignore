@@ -2,3 +2,6 @@ node_modules/
 out/
 dist/
 *.log
+CLAUDE.md
+.codegraph/ 
+deploy.bat
