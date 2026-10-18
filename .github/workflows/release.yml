@@ -31,9 +31,12 @@ jobs:
       - run: npm run build
       # electron-builder uploads files in parallel and creates duplicate releases when none exists yet,
       # so a single draft is created first and only published once every file is uploaded.
+      # A re-run of a cancelled build reuses the draft it left behind.
       - name: Create draft release
         shell: bash
-        run: gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --generate-notes
+        run: |
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --generate-notes
       - run: npx electron-builder --win --publish always
       - name: Publish release
         shell: bash

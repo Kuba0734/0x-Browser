@@ -19,5 +19,16 @@ module.exports = tseslint.config(
       }
     },
     rules: { '@typescript-eslint/no-require-imports': 'off' }
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        fetch: 'readonly',
+        setTimeout: 'readonly'
+      }
+    }
   }
 )
