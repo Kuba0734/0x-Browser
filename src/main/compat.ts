@@ -10,12 +10,18 @@ import {
 // Any session.webRequest listener turns off chrome.webRequest for extensions (content blockers stop
 // working), so the header rewrite is only registered while a tab is on the sign-in host.
 const FIREFOX_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:156.0) Gecko/20100101 Firefox/156.0'
 const GOOGLE_SIGN_IN = 'https://accounts.google.com/'
 const signInTabs = new Set<WebContents>()
 
 export function userAgentFor(url: string): string {
   return url.startsWith(GOOGLE_SIGN_IN) ? FIREFOX_USER_AGENT : app.userAgentFallback
+}
+
+// Google rejects sign-in when another Google page (running as Chromium) navigates the tab there, but
+// accepts the same URL loaded by the browser itself, so such navigations are restarted from here.
+export function entersGoogleSignIn(currentUrl: string, targetUrl: string): boolean {
+  return targetUrl.startsWith(GOOGLE_SIGN_IN) && !currentUrl.startsWith(GOOGLE_SIGN_IN)
 }
 
 function rewriteHeaders(

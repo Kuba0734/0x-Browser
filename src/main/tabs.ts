@@ -8,7 +8,7 @@ import {
   type WebContents
 } from 'electron'
 import type { BrowserState, PerfTab } from '../shared/types'
-import { applyUserAgent, userAgentFor } from './compat'
+import { applyUserAgent, entersGoogleSignIn, userAgentFor } from './compat'
 import { dispatchExtensionEvent } from './extensions'
 import { cachedFavicon, resolveFavicon } from './favicons'
 import { recordVisit, updateTitle } from './history'
@@ -385,14 +385,20 @@ export class TabManager {
     const setUserAgent = (event: { url: string; isMainFrame: boolean }) => {
       if (event.isMainFrame) applyUserAgent(contents, event.url)
     }
-    contents.on('will-navigate', (event) => {
+    const navigate = (event: Event & { url: string; isMainFrame: boolean }) => {
       guard(event, event.url)
+      if (event.isMainFrame && entersGoogleSignIn(contents.getURL(), event.url)) {
+        event.preventDefault()
+        const { url } = event
+        setImmediate(() =>
+          contents.loadURL(url, { userAgent: userAgentFor(url) }).catch(() => undefined)
+        )
+        return
+      }
       setUserAgent(event)
-    })
-    contents.on('will-redirect', (event) => {
-      guard(event, event.url)
-      setUserAgent(event)
-    })
+    }
+    contents.on('will-navigate', navigate)
+    contents.on('will-redirect', navigate)
     const navigation = () => ({
       tabId: contents.id,
       frameId: 0,

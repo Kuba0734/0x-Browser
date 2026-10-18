@@ -81,11 +81,21 @@ if (location.protocol === 'https:' || location.protocol === 'http:') {
   })
 }
 
-// Google sign-in gets a Firefox user agent (see main/compat.ts); Firefox has no userAgentData,
-// so the Chromium client hints must not leak through JavaScript either.
+// Google sign-in gets a Firefox user agent (see main/compat.ts) and compares it with what scripts
+// see, so Chromium-only navigator values and window.chrome must not give it away.
 if (location.hostname === 'accounts.google.com') {
   contextBridge.executeInMainWorld({
-    func: () =>
-      Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined })
+    func: () => {
+      const firefox: Record<string, unknown> = {
+        userAgentData: undefined,
+        vendor: '',
+        productSub: '20100101',
+        oscpu: 'Windows NT 10.0; Win64; x64',
+        buildID: '20181001000000'
+      }
+      for (const [name, value] of Object.entries(firefox))
+        Object.defineProperty(Navigator.prototype, name, { get: () => value, configurable: true })
+      delete (window as { chrome?: unknown }).chrome
+    }
   })
 }
