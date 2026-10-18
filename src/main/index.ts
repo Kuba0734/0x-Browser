@@ -1,4 +1,6 @@
-import { join } from 'node:path'
+import { statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   app,
   BrowserWindow,
@@ -94,7 +96,7 @@ import { handleShortcut } from './shortcuts'
 import { createSaver, readJson } from './store'
 import { TabManager, type SavedWindow, type Tab } from './tabs'
 import { checkForUpdates, initUpdater, installUpdate, updateState } from './updater'
-import { internalUrl, isInternalUrl, isWebUrl, resolveInput } from './url'
+import { internalUrl, isFileUrl, isInternalUrl, isWebUrl, resolveInput } from './url'
 
 const TABSTRIP_HEIGHT = 40
 const APP_ICON = join(app.getAppPath(), 'assets', 'icons', 'app.ico')
@@ -340,7 +342,30 @@ appActions.newWindow = (url) => {
   createWindow({ url })
 }
 
-const navigable = (url: string) => isWebUrl(url) || isInternalUrl(url)
+appActions.openFiles = async (tabs) => {
+  const parent = BrowserWindow.getFocusedWindow()
+  const options = {
+    properties: ['openFile', 'multiSelections'] as ('openFile' | 'multiSelections')[]
+  }
+  const result = await (parent
+    ? dialog.showOpenDialog(parent, options)
+    : dialog.showOpenDialog(options))
+  for (const path of result.filePaths) tabs.create(pathToFileURL(path).href)
+}
+
+function fileUrlsFromArgs(argv: string[], cwd: string): string[] {
+  return argv.slice(1).flatMap((arg) => {
+    if (arg.startsWith('-')) return []
+    const path = resolve(cwd, arg)
+    try {
+      return statSync(path).isFile() ? [pathToFileURL(path).href] : []
+    } catch {
+      return []
+    }
+  })
+}
+
+const navigable = (url: string) => isWebUrl(url) || isInternalUrl(url) || isFileUrl(url)
 const coords = (x: unknown, y: unknown): [number, number] => [Number(x) || 0, Number(y) || 0]
 
 function registerIpc(): void {
@@ -592,6 +617,21 @@ function registerIpc(): void {
   })
 }
 
+const primaryInstance = app.requestSingleInstanceLock()
+// exit() skips the quit handlers, which would overwrite the running instance's session and settings.
+if (!primaryInstance) app.exit(0)
+
+app.on('second-instance', (_event, argv, cwd) => {
+  const urls = fileUrlsFromArgs(argv, cwd)
+  const focused = BrowserWindow.getFocusedWindow()
+  const target = [...windows].find((entry) => entry.win === focused) ?? [...windows].at(-1)
+  if (!target) return void createWindow({ url: urls[0] })
+  if (!urls.length) return void createWindow()
+  for (const url of urls) target.tabs.create(url)
+  if (target.win.isMinimized()) target.win.restore()
+  target.win.focus()
+})
+
 app.whenReady().then(async () => {
   const splash = createSplash()
   registerInternalProtocol()
@@ -610,9 +650,10 @@ app.whenReady().then(async () => {
     })
   await loadExtensions()
   const saved = loadSession()
-  await Promise.all(
+  const [first] = await Promise.all(
     (saved.length ? saved : [undefined]).map((entry) => createWindow({ saved: entry }))
   )
+  for (const url of fileUrlsFromArgs(process.argv, process.cwd())) first.tabs.create(url)
   if (!splash.isDestroyed()) splash.destroy()
   initUpdater()
 })

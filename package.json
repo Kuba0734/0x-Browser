@@ -1,7 +1,7 @@
 {
   "name": "0x-browser",
   "productName": "0x Browser",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "Minimal, performance-focused desktop browser",
   "main": "./out/main/index.js",
@@ -54,6 +54,43 @@
       "target": "nsis",
       "icon": "assets/icons/app.ico"
     },
+    "fileAssociations": [
+      {
+        "ext": [
+          "html",
+          "htm",
+          "xhtml"
+        ],
+        "name": "HTML Document",
+        "role": "Viewer"
+      },
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "svg",
+          "png",
+          "jpg",
+          "jpeg",
+          "gif",
+          "webp"
+        ],
+        "name": "Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "txt",
+          "json",
+          "xml"
+        ],
+        "name": "Text Document",
+        "role": "Viewer"
+      }
+    ],
     "nsis": {
       "oneClick": true,
       "perMachine": false,

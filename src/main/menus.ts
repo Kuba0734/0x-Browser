@@ -35,6 +35,7 @@ export function popupAppMenu(win: BrowserWindow, tabs: TabManager, x: number, y:
     [
       { label: 'New tab', accelerator: 'Ctrl+T', click: () => tabs.create() },
       { label: 'New window', accelerator: 'Ctrl+N', click: () => appActions.newWindow() },
+      { label: 'Open file…', accelerator: 'Ctrl+O', click: () => appActions.openFiles(tabs) },
       { type: 'separator' },
       { label: 'Bookmarks', click: open('bookmarks') },
       { label: 'Downloads', click: open('downloads') },

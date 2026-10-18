@@ -367,7 +367,8 @@ export class TabManager {
         preload: join(__dirname, '../preload/index.js'),
         sandbox: true,
         contextIsolation: true,
-        nodeIntegration: false
+        nodeIntegration: false,
+        plugins: true
       }
     })
     tab.view = view

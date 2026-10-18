@@ -17,7 +17,9 @@ test('resolveInput', () => {
   assert.equal(resolve('e.g.'), search('e.g.'))
   assert.equal(resolve('1.5'), search('1.5'))
   assert.equal(resolve('javascript:alert(1)'), search('javascript:alert(1)'))
-  assert.equal(resolve('file:///C:/Windows'), search('file:///C:/Windows'))
+  assert.equal(resolve('file:///C:/Windows'), 'file:///C:/Windows')
+  assert.equal(resolve('C:\\Users\\me\\My File.pdf'), 'file:///C:/Users/me/My%20File.pdf')
+  assert.equal(resolve('"D:/docs/page.html"'), 'file:///D:/docs/page.html')
 })
 
 test('resolveInput internal pages', () => {

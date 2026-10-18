@@ -24,6 +24,7 @@ function resolveAction(tabs: TabManager, ui: WebContents, input: Input): (() => 
   if (input.control && !input.alt) {
     if (key === 't') return () => tabs.create()
     if (key === 'n') return () => appActions.newWindow()
+    if (key === 'o') return () => appActions.openFiles(tabs)
     if (key === 'w') return () => tabs.closeActive()
     if (key === 'l') return focusAddress
     if (key === 'r') return () => tabs.reload(input.shift)

@@ -1,3 +1,5 @@
+import { pathToFileURL } from 'node:url'
+
 export const INTERNAL_SCHEME = 'ox'
 export const INTERNAL_PREFIX = `${INTERNAL_SCHEME}://`
 export const HOME_URL = `${INTERNAL_PREFIX}home/`
@@ -14,11 +16,20 @@ const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 const DOMAIN = /^([a-z0-9-]+\.)+([a-z]{2,}|xn--[a-z0-9-]+)(:\d+)?$/i
 const IPV4 = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/
 const INTERNAL_INPUT = /^(0x|ox):\/\/([a-z]+)\/?$/i
+const WINDOWS_PATH = /^[a-z]:[\\/]/i
 
 export function isWebUrl(url: string): boolean {
   try {
     const { protocol } = new URL(url)
     return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+export function isFileUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'file:'
   } catch {
     return false
   }
@@ -38,6 +49,9 @@ export function resolveInput(input: string, searchUrl: string): string | null {
   const internal = INTERNAL_INPUT.exec(text)
   if (internal)
     return internalUrl(internal[2].toLowerCase()) ?? searchUrl + encodeURIComponent(text)
+  const path = text.replace(/^"(.+)"$/, '$1')
+  if (WINDOWS_PATH.test(path)) return pathToFileURL(path).href
+  if (/^file:\/\//i.test(text)) return isFileUrl(text) ? text : searchUrl + encodeURIComponent(text)
   if (/^https?:\/\//i.test(text))
     return isWebUrl(text) ? text : searchUrl + encodeURIComponent(text)
   if (!/\s/.test(text)) {
