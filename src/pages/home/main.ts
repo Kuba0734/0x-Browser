@@ -120,7 +120,6 @@ search.addEventListener('keydown', (event) => {
 })
 
 search.addEventListener('blur', () => setTimeout(hideSuggestions, 150))
-window.addEventListener('blur', hideSuggestions)
 window.addEventListener('resize', hideSuggestions)
 api.ui.onSuggestionPicked((index) => {
   const item = suggestions[index]
