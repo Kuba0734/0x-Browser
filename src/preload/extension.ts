@@ -191,8 +191,10 @@ function polyfill(): void {
   }
 }
 
+// The service worker preload realm has no window or location; the polyfill itself skips web workers.
 // MV2 background pages run without context isolation, so the preload already shares their world.
-if (location.protocol === 'chrome-extension:') {
+if (typeof window === 'undefined') contextBridge.executeInMainWorld({ func: polyfill })
+else if (location.protocol === 'chrome-extension:') {
   if (process.contextIsolated) contextBridge.executeInMainWorld({ func: polyfill })
   else polyfill()
 }
