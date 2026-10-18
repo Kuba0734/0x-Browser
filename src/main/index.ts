@@ -71,6 +71,7 @@ import {
   popupAppMenu,
   popupBookmarkContext,
   popupBookmarkFolder,
+  popupDownloadsMenu,
   popupExtensionsMenu,
   popupPageMenu,
   popupTabMenu
@@ -472,6 +473,9 @@ function registerIpc(): void {
   )
   listen('ui:tab-menu', (sender, id, x, y) =>
     popupTabMenu(winOf(sender), tabsOf(sender), int(id), ...coords(x, y))
+  )
+  listen('ui:downloads-menu', (sender, x, y) =>
+    popupDownloadsMenu(winOf(sender), tabsOf(sender), ...coords(x, y))
   )
   listen('ui:extensions-menu', (sender, x, y) =>
     popupExtensionsMenu(winOf(sender), tabsOf(sender), ...coords(x, y))

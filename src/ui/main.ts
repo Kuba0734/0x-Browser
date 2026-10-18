@@ -631,7 +631,10 @@ extensionsButton.addEventListener('click', () => {
   const rect = extensionsButton.getBoundingClientRect()
   api.ui.extensionsMenu(rect.right, rect.bottom + 4)
 })
-downloadsButton.addEventListener('click', () => api.tabs.openInternal('downloads'))
+downloadsButton.addEventListener('click', () => {
+  const rect = downloadsButton.getBoundingClientRect()
+  api.ui.downloadsMenu(rect.right, rect.bottom + 4)
+})
 byId('menu-button').addEventListener('click', (event) => {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   api.ui.menu(rect.left, rect.bottom + 4)

@@ -64,6 +64,7 @@ export const api = {
     bookmarkContext: (id: string, x: number, y: number) => send('ui:bookmark-context', id, x, y),
     extensionPopup: (id: string, x: number, y: number) => send('ui:extension-popup', id, x, y),
     extensionsMenu: (x: number, y: number) => send('ui:extensions-menu', x, y),
+    downloadsMenu: (x: number, y: number) => send('ui:downloads-menu', x, y),
     onFocusAddress: on<void>('ui:focus-address'),
     showSuggestions: (items: Suggestion[], selected: number, x: number, y: number, width: number) =>
       send('suggest:show', items, selected, x, y, width),
