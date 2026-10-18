@@ -52,6 +52,7 @@ import {
   setExtensionPinned
 } from './extensions'
 import { appActions } from './app-actions'
+import { isDefaultBrowser, openDefaultAppsSettings } from './default-browser'
 import { allFavicons, clearFavicons, flushFavicons, loadFavicons } from './favicons'
 import {
   clearHistory,
@@ -154,6 +155,7 @@ type AppWindow = {
   suggest: WebContentsView
   prompt: WebContentsView
   suggestOwner?: WebContents
+  notice?: WebContentsView
 }
 
 const SESSION_FILE = 'session.json'
@@ -279,8 +281,8 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
     onChange: (state) => {
       if (!ui.isDestroyed()) ui.send('tabs:state', state)
       // New tab views stack above existing children, so visible overlays are raised again.
-      for (const overlay of [suggest, prompt])
-        if (overlay.getVisible()) win.contentView.addChildView(overlay)
+      for (const overlay of [suggest, prompt, entry.notice])
+        if (overlay?.getVisible()) win.contentView.addChildView(overlay)
       saveSession()
     },
     onInput: (event, input) => handleShortcut(tabs, ui, event, input),
@@ -307,6 +309,7 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
   win.on('closed', () => {
     suggest.webContents.close()
     prompt.webContents.close()
+    entry.notice?.webContents.close()
     windows.delete(entry)
     tabs.destroyAll()
     saveSession()
@@ -353,15 +356,44 @@ appActions.openFiles = async (tabs) => {
   for (const path of result.filePaths) tabs.create(pathToFileURL(path).href)
 }
 
-function fileUrlsFromArgs(argv: string[], cwd: string): string[] {
+function urlsFromArgs(argv: string[], cwd: string): string[] {
   return argv.slice(1).flatMap((arg) => {
     if (arg.startsWith('-')) return []
+    if (isWebUrl(arg)) return [arg]
     const path = resolve(cwd, arg)
     try {
       return statSync(path).isFile() ? [pathToFileURL(path).href] : []
     } catch {
       return []
     }
+  })
+}
+
+const NOTICE_WIDTH = 360
+const NOTICE_HEIGHT = 160
+
+// Created only when needed and closed for good on dismiss, so it costs nothing afterwards.
+function showDefaultBrowserNotice(entry: AppWindow): void {
+  const { win } = entry
+  const notice = createOverlayView('notice/index.html')
+  entry.notice = notice
+  const place = () => {
+    const { height } = win.getContentBounds()
+    notice.setBounds({
+      x: 0,
+      y: height - NOTICE_HEIGHT,
+      width: NOTICE_WIDTH,
+      height: NOTICE_HEIGHT
+    })
+  }
+  place()
+  win.on('resize', place)
+  win.contentView.addChildView(notice)
+  notice.webContents.once('did-finish-load', () => notice.setVisible(true))
+  notice.webContents.once('destroyed', () => {
+    win.off('resize', place)
+    if (!win.isDestroyed()) win.contentView.removeChildView(notice)
+    entry.notice = undefined
   })
 }
 
@@ -469,6 +501,16 @@ function registerIpc(): void {
   listen('suggest:hide', (sender) => {
     const entry = windowFor(sender)
     if (!entry.suggestOwner || entry.suggestOwner === sender) entry.suggest.setVisible(false)
+  })
+  const isNotice = (sender: WebContents) =>
+    [...windows].some((entry) => entry.notice?.webContents === sender)
+  listen('notice:dismiss', (sender) => {
+    if (isNotice(sender)) sender.close()
+  })
+  listen('notice:set-default', (sender) => {
+    if (!isNotice(sender)) return
+    openDefaultAppsSettings()
+    sender.close()
   })
   listen('permission:answer', (_sender, id, allowed) => answerPrompt(str(id), bool(allowed)))
   handle('permissions:list', () => listPermissions())
@@ -622,7 +664,7 @@ const primaryInstance = app.requestSingleInstanceLock()
 if (!primaryInstance) app.exit(0)
 
 app.on('second-instance', (_event, argv, cwd) => {
-  const urls = fileUrlsFromArgs(argv, cwd)
+  const urls = urlsFromArgs(argv, cwd)
   const focused = BrowserWindow.getFocusedWindow()
   const target = [...windows].find((entry) => entry.win === focused) ?? [...windows].at(-1)
   if (!target) return void createWindow({ url: urls[0] })
@@ -653,7 +695,8 @@ app.whenReady().then(async () => {
   const [first] = await Promise.all(
     (saved.length ? saved : [undefined]).map((entry) => createWindow({ saved: entry }))
   )
-  for (const url of fileUrlsFromArgs(process.argv, process.cwd())) first.tabs.create(url)
+  for (const url of urlsFromArgs(process.argv, process.cwd())) first.tabs.create(url)
+  if (app.isPackaged && !(await isDefaultBrowser())) showDefaultBrowserNotice(first)
   if (!splash.isDestroyed()) splash.destroy()
   initUpdater()
 })

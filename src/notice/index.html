@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'"
+    />
+    <title>Default browser</title>
+    <link rel="stylesheet" href="../ui/tokens.css" />
+    <link rel="stylesheet" href="../prompt/prompt.css" />
+    <link rel="stylesheet" href="./notice.css" />
+  </head>
+  <body>
+    <section id="card" role="dialog" aria-labelledby="title">
+      <button id="dismiss" class="dismiss" aria-label="Close"></button>
+      <h1 id="title">Make 0x Browser your default?</h1>
+      <p>Links from other apps will open here.</p>
+      <div class="actions">
+        <button id="set-default" class="btn primary">Set as default</button>
+      </div>
+    </section>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

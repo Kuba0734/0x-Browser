@@ -1,7 +1,7 @@
 {
   "name": "0x-browser",
   "productName": "0x Browser",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "description": "Minimal, performance-focused desktop browser",
   "main": "./out/main/index.js",
@@ -95,6 +95,7 @@
       "oneClick": true,
       "perMachine": false,
       "deleteAppDataOnUninstall": false,
+      "include": "scripts/installer.nsh",
       "artifactName": "0x-Browser-Setup-${version}.${ext}"
     },
     "publish": {

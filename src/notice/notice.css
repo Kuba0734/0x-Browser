@@ -1,0 +1,59 @@
+body {
+  display: flex;
+  align-items: flex-end;
+}
+
+body #card {
+  position: relative;
+  flex: 1;
+  margin: 0 8px 16px 16px;
+  animation-name: rise;
+}
+
+h1 {
+  padding-right: var(--space-6);
+}
+
+p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.dismiss {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.dismiss:hover {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.dismiss svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}

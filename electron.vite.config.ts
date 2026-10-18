@@ -24,6 +24,7 @@ export default defineConfig({
           splash: resolve('src/splash/index.html'),
           suggest: resolve('src/suggest/index.html'),
           prompt: resolve('src/prompt/index.html'),
+          notice: resolve('src/notice/index.html'),
           ...Object.fromEntries(
             PAGES.map((page) => [page, resolve(`src/pages/${page}/index.html`)])
           )
