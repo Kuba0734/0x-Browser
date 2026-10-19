@@ -23,6 +23,7 @@ export default defineConfig({
           ui: resolve('src/ui/index.html'),
           splash: resolve('src/splash/index.html'),
           suggest: resolve('src/suggest/index.html'),
+          'bookmark-menu': resolve('src/bookmark-menu/index.html'),
           prompt: resolve('src/prompt/index.html'),
           notice: resolve('src/notice/index.html'),
           ...Object.fromEntries(

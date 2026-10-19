@@ -305,7 +305,6 @@ function renderToolbar(activeChanged: boolean): void {
   reloadButton.classList.toggle('loading', !!tab?.loading)
   reloadButton.title = tab?.loading ? 'Stop' : 'Reload'
   progress.classList.toggle('active', !!tab?.loading)
-  updateSidebarAdd()
   const editing = document.hasFocus() && document.activeElement === address
   if (activeChanged || !editing) {
     address.value = displayUrl(tab?.url ?? '')
@@ -345,19 +344,7 @@ function reportChromeHeight(): void {
   api.ui.setInsets(height, left)
 }
 
-function updateSidebarAdd(): void {
-  const url = activeTab()?.url ?? ''
-  const added = !!sidebarSites?.includes(url)
-  sidebarAdd.disabled = !/^https?:/.test(url) || added
-  sidebarAdd.title = added
-    ? 'This site is already in the sidebar'
-    : sidebarAdd.disabled
-      ? 'Open a website to add it to the sidebar'
-      : 'Add current site to sidebar'
-}
-
 function renderSidebar(): void {
-  updateSidebarAdd()
   sidebar.hidden = !sidebarSites
   sidebarList.replaceChildren(
     ...(sidebarSites ?? []).map((url) => {
@@ -557,7 +544,10 @@ api.favicons.onUpdate(([origin, favicon]) => {
   if (barNodes.some((node) => node.url && faviconFor(node.url) === favicon)) renderBookmarkBar()
   if (sidebarSites?.some((url) => faviconFor(url) === favicon)) renderSidebar()
 })
-sidebarAdd.addEventListener('click', () => api.ui.addToSidebar())
+sidebarAdd.addEventListener('click', () => {
+  const rect = sidebarAdd.getBoundingClientRect()
+  api.ui.addToSidebar(rect.right + 4, rect.top)
+})
 api.downloads.list().then(applyDownloads)
 api.extensions.list().then(applyExtensions)
 

@@ -113,7 +113,7 @@ function apply(all: DownloadState[]): void {
   reveal(list.querySelectorAll('.row:not(.reveal)'))
 }
 
-const hidePanel = () => window.ox.send('downloads:panel-hide')
+const hidePanel = () => window.ox.send('panel:hide')
 
 page.append(
   h(
@@ -155,9 +155,7 @@ if (panel) {
       }
     })
   )
-  new ResizeObserver(() => window.ox.send('downloads:panel-resize', page.offsetHeight)).observe(
-    page
-  )
+  new ResizeObserver(() => window.ox.send('panel:resize', page.offsetHeight)).observe(page)
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') hidePanel()
   })

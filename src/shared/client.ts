@@ -59,7 +59,7 @@ export const api = {
   ui: {
     setInsets: (top: number, left: number) => send('ui:insets', top, left),
     sidebarContext: (url: string, x: number, y: number) => send('ui:sidebar-context', url, x, y),
-    addToSidebar: () => send('sidebar:add'),
+    addToSidebar: (x: number, y: number) => send('sidebar:add', x, y),
     menu: (x: number, y: number) => send('ui:menu', x, y),
     tabMenu: (id: number, x: number, y: number) => send('ui:tab-menu', id, x, y),
     bookmarkMenu: (id: string, x: number, y: number) => send('ui:bookmark-menu', id, x, y),

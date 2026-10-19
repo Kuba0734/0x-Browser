@@ -1,0 +1,119 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--font-size-md);
+  user-select: none;
+}
+
+#list {
+  display: flex;
+  flex-direction: column;
+  max-height: 560px;
+  padding: var(--space-1);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  animation: open var(--duration-fast) var(--ease) both;
+}
+
+.item {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-3);
+  height: 34px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    opacity var(--duration-fast) var(--ease);
+}
+
+.item:hover {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.item.back {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.item.dragging {
+  opacity: 0.35;
+}
+
+.item.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.item.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.item.drop-into,
+#list.drop-into {
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.icon img {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: var(--space-3);
+  color: var(--text-faint);
+  font-size: var(--font-size-sm);
+}
+
+@keyframes open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

@@ -3,13 +3,24 @@ export type DropPosition = 'before' | 'after' | 'into'
 const MIME = 'application/x-0x-bookmark'
 const CLASSES = ['drop-before', 'drop-after', 'drop-into']
 
+// Drop targets nest (bar and its items), so markers are cleared document-wide, not per element.
+function clear(): void {
+  for (const el of document.querySelectorAll('.drop-before, .drop-after, .drop-into'))
+    el.classList.remove(...CLASSES)
+}
+
+document.addEventListener('dragend', clear)
+document.addEventListener('drop', clear)
+document.addEventListener('dragleave', (event) => {
+  if (!event.relatedTarget) clear()
+})
+
 function dropTarget(
   el: HTMLElement,
   position: (event: DragEvent) => DropPosition,
   onDrop: (id: string, position: DropPosition) => void,
   ownId?: string
 ): void {
-  const clear = () => el.classList.remove(...CLASSES)
   el.addEventListener('dragover', (event) => {
     if (!event.dataTransfer?.types.includes(MIME)) return
     event.preventDefault()
@@ -45,13 +56,18 @@ export function draggableBookmark(
   }
 ): void {
   el.draggable = true
+  let dragging = false
   el.addEventListener('dragstart', (event) => {
     if (!event.dataTransfer) return
     event.dataTransfer.setData(MIME, id)
     event.dataTransfer.effectAllowed = 'move'
-    requestAnimationFrame(() => el.classList.add('dragging'))
+    dragging = true
+    requestAnimationFrame(() => el.classList.toggle('dragging', dragging))
   })
-  el.addEventListener('dragend', () => el.classList.remove('dragging'))
+  el.addEventListener('dragend', () => {
+    dragging = false
+    el.classList.remove('dragging')
+  })
   if (!options.onDrop) return
   const position = (event: DragEvent): DropPosition => {
     const rect = el.getBoundingClientRect()

@@ -9,11 +9,12 @@ import {
   type WebContents
 } from 'electron'
 import { SEARCH_ENGINES } from '../shared/settings'
-import type { BookmarkNode, ExtensionInfo } from '../shared/types'
+import type { ExtensionInfo } from '../shared/types'
 import { getBookmark, removeBookmark } from './bookmarks'
 import { listExtensions, openExtensionPopup, setExtensionPinned } from './extensions'
 import type { TabManager } from './tabs'
 import { appActions } from './app-actions'
+import { topSites } from './history'
 import { getSettings, updateSettings } from './settings'
 import { internalUrl, isWebUrl } from './url'
 
@@ -50,26 +51,6 @@ export function popupAppMenu(win: BrowserWindow, tabs: TabManager, x: number, y:
   )
 }
 
-function folderItems(folder: BookmarkNode, tabs: TabManager): MenuItemConstructorOptions[] {
-  const items: MenuItemConstructorOptions[] = (folder.children ?? []).map((child) =>
-    child.children
-      ? { label: label(child.title), submenu: folderItems(child, tabs) }
-      : { label: label(child.title), click: () => tabs.navigate(child.url!) }
-  )
-  return items.length ? items : [{ label: 'Empty', enabled: false }]
-}
-
-export function popupBookmarkFolder(
-  win: BrowserWindow,
-  tabs: TabManager,
-  id: string,
-  x: number,
-  y: number
-): void {
-  const folder = getBookmark(id)
-  if (folder?.children) popup(win, folderItems(folder, tabs), x, y)
-}
-
 export function popupBookmarkContext(
   win: BrowserWindow,
   tabs: TabManager,
@@ -92,6 +73,29 @@ export function popupBookmarkContext(
     { label: 'Delete', click: () => removeBookmark(node.id) }
   )
   popup(win, items, x, y)
+}
+
+export function addSidebarSite(url: string): boolean {
+  const sites = getSettings().sidebarSites
+  if (!isWebUrl(url) || sites.includes(url) || sites.length >= 30) return false
+  updateSettings({ sidebarSites: [...sites, url] })
+  return true
+}
+
+export function popupSidebarAddMenu(
+  win: BrowserWindow,
+  tabs: TabManager,
+  x: number,
+  y: number
+): void {
+  const added = new Set(getSettings().sidebarSites)
+  const candidates = new Map<string, string>()
+  for (const { url, title } of [...tabs.snapshot().tabs, ...topSites(12)])
+    if (isWebUrl(url) && !added.has(url) && !candidates.has(url)) candidates.set(url, title)
+  const items: MenuItemConstructorOptions[] = [...candidates]
+    .slice(0, 12)
+    .map(([url, title]) => ({ label: label(title || url), click: () => addSidebarSite(url) }))
+  popup(win, items.length ? items : [{ label: 'Open a website first', enabled: false }], x, y)
 }
 
 export function popupSidebarContext(
