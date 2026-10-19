@@ -1,7 +1,7 @@
 {
   "name": "0x-browser",
   "productName": "0x Browser",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "private": true,
   "description": "Minimal, performance-focused desktop browser",
   "main": "./out/main/index.js",
