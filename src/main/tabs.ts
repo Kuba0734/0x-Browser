@@ -89,6 +89,7 @@ export class TabManager {
   private readonly options: Options
   private activeId = -1
   private chromeHeight = DEFAULT_CHROME_HEIGHT
+  private sidebarWidth = 0
 
   constructor(win: BrowserWindow, options: Options) {
     this.win = win
@@ -118,6 +119,10 @@ export class TabManager {
 
   get contentTop(): number {
     return this.chromeHeight
+  }
+
+  get contentLeft(): number {
+    return this.sidebarWidth
   }
 
   get size(): number {
@@ -312,8 +317,9 @@ export class TabManager {
     this.activeContents?.toggleDevTools()
   }
 
-  setChromeHeight(height: number): void {
-    this.chromeHeight = height
+  setInsets(top: number, left: number): void {
+    this.chromeHeight = top
+    this.sidebarWidth = left
     this.layout()
   }
 
@@ -495,9 +501,9 @@ export class TabManager {
     if (!view || this.win.isDestroyed()) return
     const [width, height] = this.win.getContentSize()
     view.setBounds({
-      x: 0,
+      x: this.sidebarWidth,
       y: this.chromeHeight,
-      width,
+      width: Math.max(0, width - this.sidebarWidth),
       height: Math.max(0, height - this.chromeHeight)
     })
   }

@@ -38,10 +38,13 @@ const updateLabel = updateButton.querySelector('.update-label') as HTMLElement
 const updateProgress = updateButton.querySelector('.update-progress > span') as HTMLElement
 const storeButton = byId<HTMLButtonElement>('store-install')
 const storeLabel = storeButton.querySelector('.store-label') as HTMLElement
+const sidebar = byId('sidebar')
+const sidebarList = byId('sidebar-sites')
+const sidebarAdd = byId<HTMLButtonElement>('sidebar-add')
+let sidebarSites: string[] | null = null
 
 const INTERNAL = 'ox://'
 const HOME = 'ox://home/'
-const sessionStart = Date.now()
 
 const tabEls = new Map<number, HTMLElement>()
 let state: BrowserState = { tabs: [], activeId: -1 }
@@ -301,6 +304,7 @@ function renderToolbar(activeChanged: boolean): void {
   reloadButton.classList.toggle('loading', !!tab?.loading)
   reloadButton.title = tab?.loading ? 'Stop' : 'Reload'
   progress.classList.toggle('active', !!tab?.loading)
+  updateSidebarAdd()
   const editing = document.hasFocus() && document.activeElement === address
   if (activeChanged || !editing) {
     address.value = displayUrl(tab?.url ?? '')
@@ -327,15 +331,52 @@ function faviconFor(url: string): string {
   }
 }
 
-let reportedHeight = -1
+let reportedInsets = ''
 
 // The tab view covers the UI until it knows the chrome height, and a covered UI does not render,
 // so ResizeObserver alone never fires at startup. Measure synchronously instead.
 function reportChromeHeight(): void {
   const height = chrome.offsetHeight
-  if (height === reportedHeight) return
-  reportedHeight = height
-  api.ui.setChromeHeight(height)
+  const left = sidebar.hidden ? 0 : sidebar.offsetWidth
+  if (`${height},${left}` === reportedInsets) return
+  reportedInsets = `${height},${left}`
+  document.documentElement.style.setProperty('--chrome-height', `${height}px`)
+  api.ui.setInsets(height, left)
+}
+
+function updateSidebarAdd(): void {
+  const url = activeTab()?.url ?? ''
+  sidebarAdd.disabled = !/^https?:/.test(url) || !!sidebarSites?.includes(url)
+}
+
+function renderSidebar(): void {
+  updateSidebarAdd()
+  sidebar.hidden = !sidebarSites
+  sidebarList.replaceChildren(
+    ...(sidebarSites ?? []).map((url) => {
+      const item = document.createElement('button')
+      item.className = 'icon-btn sidebar-site'
+      item.title = displayUrl(url)
+      item.setAttribute('aria-label', displayUrl(url))
+      const favicon = faviconFor(url)
+      if (favicon) {
+        const img = document.createElement('img')
+        img.src = favicon
+        img.alt = ''
+        item.append(img)
+      } else item.innerHTML = icon('globe')
+      item.addEventListener('click', () => api.nav.go(url))
+      item.addEventListener('auxclick', (event) => {
+        if (event.button === 1) api.tabs.create(url)
+      })
+      item.addEventListener('contextmenu', (event) => {
+        event.preventDefault()
+        api.ui.sidebarContext(url, event.clientX, event.clientY)
+      })
+      return item
+    })
+  )
+  reportChromeHeight()
 }
 
 function renderBookmarkBar(): void {
@@ -385,8 +426,6 @@ function applyBookmarks(tree: BookmarkNode): void {
 
 function applyDownloads(list: DownloadState[]): void {
   const active = list.filter((item) => item.state === 'progressing' || item.state === 'paused')
-  const recent = list.some((item) => item.startTime >= sessionStart)
-  downloadsButton.hidden = !recent && active.length === 0
   const total = active.reduce((sum, item) => sum + item.totalBytes, 0)
   const received = active.reduce((sum, item) => sum + item.receivedBytes, 0)
   const busy = active.length > 0
@@ -446,6 +485,8 @@ function applyUiSettings(settings: Settings): void {
   applySettings(settings)
   showBar = settings.showBookmarkBar
   renderBookmarkBar()
+  sidebarSites = settings.showSidebar ? settings.sidebarSites : null
+  renderSidebar()
 }
 
 function applyUpdate(update: UpdateState): void {
@@ -487,11 +528,14 @@ api.bookmarks.tree().then(applyBookmarks)
 api.favicons.all().then((all) => {
   favicons = all
   renderBookmarkBar()
+  renderSidebar()
 })
 api.favicons.onUpdate(([origin, favicon]) => {
   favicons[origin] = favicon
   if (barNodes.some((node) => node.url && faviconFor(node.url) === favicon)) renderBookmarkBar()
+  if (sidebarSites?.some((url) => faviconFor(url) === favicon)) renderSidebar()
 })
+sidebarAdd.addEventListener('click', () => api.ui.addToSidebar())
 api.downloads.list().then(applyDownloads)
 api.extensions.list().then(applyExtensions)
 

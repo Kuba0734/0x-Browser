@@ -70,6 +70,7 @@ import { log } from './logger'
 import {
   popupAppMenu,
   popupBookmarkContext,
+  popupSidebarContext,
   popupBookmarkFolder,
   popupDownloadsMenu,
   popupExtensionsMenu,
@@ -239,7 +240,7 @@ function presenterFor(contents: WebContents): PromptPresenter | null {
     key: entry,
     show: (request) => {
       prompt.setBounds({
-        x: PROMPT_LEFT,
+        x: PROMPT_LEFT + tabs.contentLeft,
         y: tabs.contentTop,
         width: PROMPT_WIDTH,
         height: 120 + request.permissions.length * 28
@@ -457,9 +458,19 @@ function registerIpc(): void {
   listen('nav:reload', (sender) => tabsOf(sender).reload())
   listen('nav:stop', (sender) => tabsOf(sender).stop())
 
-  listen('ui:chrome-height', (sender, height) => {
-    if (typeof height === 'number' && height >= 0 && height < 400)
-      tabsOf(sender).setChromeHeight(Math.round(height))
+  listen('ui:insets', (sender, top, left) => {
+    if (typeof top === 'number' && top >= 0 && top < 400 && typeof left === 'number')
+      tabsOf(sender).setInsets(Math.round(top), Math.min(120, Math.max(0, Math.round(left))))
+  })
+  listen('sidebar:add', (sender) => {
+    const url = tabsOf(sender).activeContents?.getURL() ?? ''
+    const sites = getSettings().sidebarSites
+    if (isWebUrl(url) && !sites.includes(url) && sites.length < 30)
+      updateSettings({ sidebarSites: [...sites, url] })
+  })
+  listen('ui:sidebar-context', (sender, url, x, y) => {
+    if (getSettings().sidebarSites.includes(str(url)))
+      popupSidebarContext(winOf(sender), tabsOf(sender), str(url), ...coords(x, y))
   })
   listen('ui:menu', (sender, x, y) => popupAppMenu(winOf(sender), tabsOf(sender), ...coords(x, y)))
   listen('ui:bookmark-menu', (sender, id, x, y) =>
@@ -491,9 +502,10 @@ function registerIpc(): void {
     const { win, suggest } = entry
     entry.suggestOwner = sender
     const [left, top] = coords(x, y)
-    const offset = entry.tabs.owns(sender) ? entry.tabs.contentTop : 0
+    const owned = entry.tabs.owns(sender)
+    const offset = owned ? entry.tabs.contentTop : 0
     suggest.setBounds({
-      x: Math.round(left),
+      x: Math.round(left + (owned ? entry.tabs.contentLeft : 0)),
       y: Math.round(top + offset),
       width: Math.round(Number(width) || 400),
       height: items.length * 36 + 10
@@ -561,7 +573,8 @@ function registerIpc(): void {
   handle('settings:get', () => getSettings())
   listen('settings:set', (_sender, key, value) => {
     const name = str(key) as keyof Settings
-    if (!(name in DEFAULT_SETTINGS) || name === 'design' || name === 'downloadDir') return
+    if (!(name in DEFAULT_SETTINGS) || ['design', 'downloadDir', 'sidebarSites'].includes(name))
+      return
     if (typeof value !== typeof DEFAULT_SETTINGS[name]) return
     if (name === 'searchEngine' && !(str(value) in SEARCH_ENGINES)) return
     if (name === 'sleepAfterMinutes') {

@@ -86,13 +86,7 @@
           <span class="update-label"></span>
           <span class="update-progress"><span></span></span>
         </button>
-        <button
-          id="downloads-button"
-          class="icon-btn"
-          title="Downloads"
-          aria-label="Downloads"
-          hidden
-        >
+        <button id="downloads-button" class="icon-btn" title="Downloads" aria-label="Downloads">
           <span data-icon="download"></span>
           <span class="download-label"></span>
           <span class="download-progress"><span></span></span>
@@ -108,6 +102,16 @@
       <nav id="bookmark-bar" aria-label="Bookmarks bar" hidden></nav>
       <div id="progress"></div>
     </header>
+    <nav id="sidebar" aria-label="Sidebar" hidden>
+      <div id="sidebar-sites"></div>
+      <button
+        id="sidebar-add"
+        class="icon-btn"
+        data-icon="plus"
+        title="Add current site to sidebar"
+        aria-label="Add current site to sidebar"
+      ></button>
+    </nav>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

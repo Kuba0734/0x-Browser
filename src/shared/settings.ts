@@ -32,6 +32,8 @@ export type Settings = {
   searchEngine: SearchEngine
   searchSuggestions: boolean
   showBookmarkBar: boolean
+  showSidebar: boolean
+  sidebarSites: string[]
   showMostVisited: boolean
   reducedMotion: boolean
   forceDarkWeb: boolean
@@ -45,6 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
   searchEngine: 'google',
   searchSuggestions: true,
   showBookmarkBar: true,
+  showSidebar: false,
+  sidebarSites: [],
   showMostVisited: true,
   reducedMotion: false,
   forceDarkWeb: true,
@@ -57,31 +61,16 @@ export const DEFAULT_SETTINGS: Settings = {
 export type DesignToken = {
   key: string
   label: string
-  group: 'Colors' | 'Shape' | 'Spacing' | 'Typography' | 'Motion' | 'Effects'
-  type: 'color' | 'text' | 'range'
+  type: 'color' | 'text'
   value: string
-  min?: number
-  max?: number
-  unit?: string
 }
 
 const color = (key: string, label: string, value: string): DesignToken => ({
   key,
   label,
-  group: 'Colors',
   type: value.startsWith('#') ? 'color' : 'text',
   value
 })
-
-const range = (
-  key: string,
-  label: string,
-  group: DesignToken['group'],
-  value: number,
-  min: number,
-  max: number,
-  unit: string
-): DesignToken => ({ key, label, group, type: 'range', value: `${value}${unit}`, min, max, unit })
 
 export const DESIGN_TOKENS: DesignToken[] = [
   color('--bg', 'Background', '#0a0a0b'),
@@ -96,21 +85,7 @@ export const DESIGN_TOKENS: DesignToken[] = [
   color('--on-accent', 'Text on accent', '#0a0a0b'),
   color('--accent-glow', 'Accent glow', 'rgba(255, 255, 255, 0.14)'),
   color('--danger', 'Danger', '#ff5c5c'),
-  color('--success', 'Success', '#3ddc84'),
-  range('--radius-sm', 'Small radius', 'Shape', 6, 0, 16, 'px'),
-  range('--radius-md', 'Medium radius', 'Shape', 10, 0, 24, 'px'),
-  range('--radius-lg', 'Large radius', 'Shape', 14, 0, 32, 'px'),
-  range('--space-2', 'Spacing S', 'Spacing', 8, 4, 16, 'px'),
-  range('--space-4', 'Spacing M', 'Spacing', 16, 8, 32, 'px'),
-  range('--space-6', 'Spacing L', 'Spacing', 24, 12, 48, 'px'),
-  range('--font-size-sm', 'Small text', 'Typography', 12, 10, 16, 'px'),
-  range('--font-size-md', 'Body text', 'Typography', 13, 11, 18, 'px'),
-  range('--font-size-lg', 'Large text', 'Typography', 15, 12, 22, 'px'),
-  range('--duration-fast', 'Fast animations', 'Motion', 150, 0, 600, 'ms'),
-  range('--duration-base', 'Default animations', 'Motion', 220, 0, 800, 'ms'),
-  range('--duration-slow', 'Slow animations', 'Motion', 300, 0, 1000, 'ms'),
-  range('--stagger', 'List stagger', 'Motion', 50, 0, 120, 'ms'),
-  range('--blur', 'Glass blur', 'Effects', 20, 0, 40, 'px')
+  color('--success', 'Success', '#3ddc84')
 ]
 
 export function isValidTokenValue(value: string): boolean {

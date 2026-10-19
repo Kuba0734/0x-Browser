@@ -643,3 +643,40 @@ svg {
     transform: scale(1.25);
   }
 }
+
+#sidebar {
+  position: fixed;
+  top: var(--chrome-height, 84px);
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: 48px;
+  padding: var(--space-2) 0;
+  overflow: hidden auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  animation: fade-in var(--duration-base) var(--ease) both;
+}
+
+#sidebar[hidden] {
+  display: none;
+}
+
+#sidebar-sites {
+  display: contents;
+}
+
+.sidebar-site {
+  flex-shrink: 0;
+  animation: fade-in var(--duration-base) var(--ease) both;
+}
+
+.sidebar-site img,
+.sidebar-site svg {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}

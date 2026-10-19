@@ -15,7 +15,7 @@ import { clearDownloads, listDownloads, openDownload } from './downloads'
 import { listExtensions, openExtensionPopup, setExtensionPinned } from './extensions'
 import type { TabManager } from './tabs'
 import { appActions } from './app-actions'
-import { getSettings } from './settings'
+import { getSettings, updateSettings } from './settings'
 import { internalUrl, isWebUrl } from './url'
 
 const label = (text: string) => (text || 'Untitled').replace(/&/g, '&&').slice(0, 80)
@@ -93,6 +93,32 @@ export function popupBookmarkContext(
     { label: 'Delete', click: () => removeBookmark(node.id) }
   )
   popup(win, items, x, y)
+}
+
+export function popupSidebarContext(
+  win: BrowserWindow,
+  tabs: TabManager,
+  url: string,
+  x: number,
+  y: number
+): void {
+  popup(
+    win,
+    [
+      { label: 'Open', click: () => tabs.navigate(url) },
+      { label: 'Open in new tab', click: () => tabs.create(url) },
+      { type: 'separator' },
+      {
+        label: 'Remove from sidebar',
+        click: () =>
+          updateSettings({
+            sidebarSites: getSettings().sidebarSites.filter((site) => site !== url)
+          })
+      }
+    ],
+    x,
+    y
+  )
 }
 
 export function popupDownloadsMenu(

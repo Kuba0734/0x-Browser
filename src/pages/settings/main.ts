@@ -48,6 +48,7 @@ function setting(label: string, description: string, control: HTMLElement): HTML
 function toggle(
   key:
     | 'showBookmarkBar'
+    | 'showSidebar'
     | 'reducedMotion'
     | 'askDownloadLocation'
     | 'forceDarkWeb'
@@ -86,58 +87,31 @@ function tokenControl(token: DesignToken): HTMLElement {
     'aria-label': `Reset ${token.label}`,
     onclick: () => api.settings.setToken(token.key, null)
   })
-  let input: HTMLInputElement
-  let output: HTMLElement | null = null
-  if (token.type === 'range') {
-    output = h('span', { class: 'token-value' })
-    input = h('input', {
-      type: 'range',
-      min: token.min,
-      max: token.max,
-      'aria-label': token.label,
-      oninput: () => {
-        output!.textContent = `${input.value}${token.unit}`
-        api.settings.setToken(token.key, `${input.value}${token.unit}`)
-      }
-    })
-  } else {
-    input = h('input', {
-      class: token.type === 'text' ? 'input token-text' : '',
-      type: token.type,
-      'aria-label': token.label,
-      spellcheck: false,
-      [token.type === 'color' ? 'oninput' : 'onchange']: () =>
-        api.settings.setToken(token.key, input.value)
-    })
-  }
-  updaters.push((settings) => {
-    const value = read(settings)
-    reset.disabled = !(token.key in settings.design)
-    if (document.activeElement === input) return
-    input.value = token.type === 'range' ? String(parseFloat(value)) : value
-    if (output) output.textContent = value
+  const input = h('input', {
+    class: token.type === 'text' ? 'input token-text' : '',
+    type: token.type,
+    'aria-label': token.label,
+    spellcheck: false,
+    [token.type === 'color' ? 'oninput' : 'onchange']: () =>
+      api.settings.setToken(token.key, input.value)
   })
-  return h('div', { class: 'token-control' }, input, output, reset)
+  updaters.push((settings) => {
+    reset.disabled = !(token.key in settings.design)
+    if (document.activeElement !== input) input.value = read(settings)
+  })
+  return h('div', { class: 'token-control' }, input, reset)
 }
 
-function appearance(): HTMLElement[] {
-  const groups = [...new Set(DESIGN_TOKENS.map((token) => token.group))]
-  return groups.map((group) =>
-    h(
-      'div',
-      { class: 'settings-group' },
-      h('h3', { class: 'token-group', text: group }),
+function appearance(): HTMLElement {
+  return h(
+    'div',
+    { class: 'card' },
+    ...DESIGN_TOKENS.map((token) =>
       h(
         'div',
-        { class: 'card' },
-        ...DESIGN_TOKENS.filter((token) => token.group === group).map((token) =>
-          h(
-            'div',
-            { class: 'row setting' },
-            h('div', { class: 'row-main', text: token.label }),
-            tokenControl(token)
-          )
-        )
+        { class: 'row setting' },
+        h('div', { class: 'row-main', text: token.label }),
+        tokenControl(token)
       )
     )
   )
@@ -484,6 +458,11 @@ page.append(
       ),
       setting('Show bookmarks bar', 'Appears once you have bookmarks', toggle('showBookmarkBar')),
       setting(
+        'Show sidebar',
+        'Shortcuts to your favorite websites on the left edge',
+        toggle('showSidebar')
+      ),
+      setting(
         'Dark mode for websites',
         'Makes light websites like Google dark. Applies after a restart.',
         darkMode()
@@ -527,7 +506,7 @@ page.append(
         onclick: () => api.settings.resetDesign()
       })
     ),
-    ...appearance()
+    appearance()
   ),
   section(h('h2', { class: 'section-title', text: 'About & updates' }), about())
 )

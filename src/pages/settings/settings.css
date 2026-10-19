@@ -12,30 +12,11 @@ select.setting-select {
   justify-content: flex-end;
 }
 
-.token-group {
-  margin: var(--space-6) 0 var(--space-2);
-  color: var(--text-faint);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-}
-
 .token-control {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
-}
-
-.token-control input[type='range'] {
-  width: 180px;
-}
-
-.token-value {
-  min-width: 52px;
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 .token-text {
@@ -58,6 +39,10 @@ select.setting-select {
 
 .appearance-header .section-title {
   margin: 0;
+}
+
+.appearance-header + .card {
+  margin-top: var(--space-4);
 }
 
 .settings-search {

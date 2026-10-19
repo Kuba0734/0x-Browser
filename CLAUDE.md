@@ -99,4 +99,4 @@ Gilt nur für die Browser-Oberfläche und interne Seiten, nie für Webinhalte.
 - Tab-Leiste und Adressleiste reagieren immer sofort, Animationen dürfen Eingaben nie verzögern
 
 # Regeln
-- gib mir hedes mal am schlutz ein kurzen satz was du geändert hast für den hit commit
+- gib mir jedes mal am schluts ein kurzen satz was du geändert hast für den commit auf englisch
