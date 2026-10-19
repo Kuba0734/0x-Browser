@@ -48,6 +48,41 @@ const backgroundFor = (url: string) => (isInternalUrl(url) ? '#0a0a0b' : '#fffff
 
 let nextTabId = 1
 
+const webPreferences = () => ({
+  preload: join(__dirname, '../preload/index.js'),
+  sandbox: true,
+  contextIsolation: true,
+  nodeIntegration: false,
+  plugins: true
+})
+
+function watchNavigation(contents: WebContents): void {
+  // Web pages may never navigate into internal ox:// pages.
+  const guard = (event: Event, url: string) => {
+    if (isInternalUrl(url) && !isInternalUrl(contents.getURL())) event.preventDefault()
+  }
+  const setUserAgent = (event: { url: string; isMainFrame: boolean }) => {
+    if (event.isMainFrame) applyUserAgent(contents, event.url)
+  }
+  const navigate = (event: Event & { url: string; isMainFrame: boolean }) => {
+    guard(event, event.url)
+    if (event.isMainFrame && entersGoogleSignIn(contents.getURL(), event.url)) {
+      event.preventDefault()
+      const { url } = event
+      setImmediate(() =>
+        contents.loadURL(url, { userAgent: userAgentFor(url) }).catch(() => undefined)
+      )
+      return
+    }
+    setUserAgent(event)
+  }
+  contents.on('will-navigate', navigate)
+  contents.on('will-redirect', navigate)
+  contents.on('did-start-navigation', (event) => {
+    if (!event.isSameDocument) setUserAgent(event)
+  })
+}
+
 export class TabManager {
   private readonly tabs: Tab[] = []
   private readonly win: BrowserWindow
@@ -362,43 +397,36 @@ export class TabManager {
 
   // Tabs can move between windows, so view events always go to the tab's current owner.
   private createView(tab: Tab): WebContentsView {
-    const view = new WebContentsView({
-      webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        plugins: true
-      }
-    })
+    const view = new WebContentsView({ webPreferences: webPreferences() })
     tab.view = view
     const contents = view.webContents
-    // Popups are denied and opened as regular tabs so web content never gets a window handle of ours.
-    contents.setWindowOpenHandler(({ url }) => {
+    const openTab = ({ url }: { url: string }) => {
       if (isWebUrl(url)) tab.owner.create(url)
-      return { action: 'deny' }
+      return { action: 'deny' as const }
+    }
+    // Sign-in flows ("Sign in with Google" etc.) need a real popup with window.opener, so window.open
+    // with window features gets a sandboxed popup window; everything else opens as a regular tab.
+    contents.setWindowOpenHandler((details) =>
+      details.disposition === 'new-window' && isWebUrl(details.url)
+        ? {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              autoHideMenuBar: true,
+              backgroundColor: '#ffffff',
+              webPreferences: webPreferences()
+            }
+          }
+        : openTab(details)
+    )
+    contents.on('did-create-window', (popup, { url }) => {
+      popup.removeMenu()
+      popup.webContents.setWindowOpenHandler(openTab)
+      watchNavigation(popup.webContents)
+      applyUserAgent(popup.webContents, url)
+      if (entersGoogleSignIn('', url))
+        popup.webContents.loadURL(url, { userAgent: userAgentFor(url) }).catch(() => undefined)
     })
-    // Web pages may never navigate into internal ox:// pages.
-    const guard = (event: Event, url: string) => {
-      if (isInternalUrl(url) && !isInternalUrl(contents.getURL())) event.preventDefault()
-    }
-    const setUserAgent = (event: { url: string; isMainFrame: boolean }) => {
-      if (event.isMainFrame) applyUserAgent(contents, event.url)
-    }
-    const navigate = (event: Event & { url: string; isMainFrame: boolean }) => {
-      guard(event, event.url)
-      if (event.isMainFrame && entersGoogleSignIn(contents.getURL(), event.url)) {
-        event.preventDefault()
-        const { url } = event
-        setImmediate(() =>
-          contents.loadURL(url, { userAgent: userAgentFor(url) }).catch(() => undefined)
-        )
-        return
-      }
-      setUserAgent(event)
-    }
-    contents.on('will-navigate', navigate)
-    contents.on('will-redirect', navigate)
+    watchNavigation(contents)
     const navigation = () => ({
       tabId: contents.id,
       frameId: 0,
@@ -416,9 +444,6 @@ export class TabManager {
     contents.on('dom-ready', () =>
       dispatchExtensionEvent('webNavigation.onDOMContentLoaded', navigation())
     )
-    contents.on('did-start-navigation', (event) => {
-      if (!event.isSameDocument) setUserAgent(event)
-    })
     contents.on('before-input-event', (event, input) => tab.owner.options.onInput(event, input))
     contents.on('context-menu', (_event, params) =>
       tab.owner.options.onContextMenu(contents, params)
