@@ -92,7 +92,8 @@ export const api = {
     update: (id: string, title: string, url?: string) =>
       invoke<void>('bookmarks:update', id, title, url),
     remove: (id: string) => invoke<void>('bookmarks:remove', id),
-    move: (id: string, parentId: string) => invoke<void>('bookmarks:move', id, parentId),
+    move: (id: string, parentId: string, index?: number) =>
+      invoke<void>('bookmarks:move', id, parentId, index),
     toggle: (url: string, title: string) => invoke<boolean>('bookmarks:toggle', url, title),
     onChange: on<BookmarkNode>('bookmarks:changed')
   },

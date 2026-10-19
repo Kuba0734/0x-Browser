@@ -72,7 +72,6 @@ import {
   popupBookmarkContext,
   popupSidebarContext,
   popupBookmarkFolder,
-  popupDownloadsMenu,
   popupExtensionsMenu,
   popupPageMenu,
   popupTabMenu
@@ -158,6 +157,8 @@ type AppWindow = {
   prompt: WebContentsView
   suggestOwner?: WebContents
   notice?: WebContentsView
+  downloads?: WebContentsView
+  downloadsHiddenAt?: number
 }
 
 const SESSION_FILE = 'session.json'
@@ -199,6 +200,7 @@ function windowFor(sender: WebContents): AppWindow {
       entry.win.webContents === sender ||
       entry.suggest.webContents === sender ||
       entry.prompt.webContents === sender ||
+      entry.downloads?.webContents === sender ||
       entry.tabs.owns(sender)
     )
       return entry
@@ -212,7 +214,7 @@ function windowForTab(id: number): AppWindow | undefined {
   return [...windows].find((entry) => entry.tabs.has(id))
 }
 
-function createOverlayView(page: string): WebContentsView {
+function createOverlayView(page: string, hash = ''): WebContentsView {
   const view = new WebContentsView({
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -225,8 +227,33 @@ function createOverlayView(page: string): WebContentsView {
   view.setBackgroundColor('#00000000')
   view.setVisible(false)
   addUi(view.webContents)
-  view.webContents.loadURL(rendererUrl(page))
+  view.webContents.loadURL(rendererUrl(page) + hash)
   return view
+}
+
+const DOWNLOADS_PANEL_WIDTH = 380
+
+function hideDownloadsPanel(entry: AppWindow): void {
+  if (!entry.downloads?.getVisible()) return
+  entry.downloads.setVisible(false)
+  entry.downloadsHiddenAt = Date.now()
+}
+
+// The panel is created on first use and closes when it loses focus, like a menu.
+function toggleDownloadsPanel(entry: AppWindow, right: number, top: number): void {
+  if (Date.now() - (entry.downloadsHiddenAt ?? 0) < 250) return
+  if (!entry.downloads) {
+    const view = createOverlayView('pages/downloads/index.html', '#panel')
+    view.webContents.on('blur', () => hideDownloadsPanel(entry))
+    entry.downloads = view
+  }
+  const { win, downloads } = entry
+  const height = downloads.getBounds().height || 160
+  const width = Math.min(DOWNLOADS_PANEL_WIDTH, win.getContentSize()[0] - 16)
+  downloads.setBounds({ x: Math.round(right - width), y: Math.round(top), width, height })
+  win.contentView.addChildView(downloads)
+  downloads.setVisible(true)
+  downloads.webContents.focus()
 }
 
 const PROMPT_WIDTH = 360
@@ -283,7 +310,7 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
     onChange: (state) => {
       if (!ui.isDestroyed()) ui.send('tabs:state', state)
       // New tab views stack above existing children, so visible overlays are raised again.
-      for (const overlay of [suggest, prompt, entry.notice])
+      for (const overlay of [suggest, prompt, entry.notice, entry.downloads])
         if (overlay?.getVisible()) win.contentView.addChildView(overlay)
       saveSession()
     },
@@ -295,7 +322,10 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
   const prompt = createOverlayView('prompt/index.html')
   win.contentView.addChildView(suggest)
   win.contentView.addChildView(prompt)
-  win.on('resize', () => suggest.setVisible(false))
+  win.on('resize', () => {
+    suggest.setVisible(false)
+    hideDownloadsPanel(entry)
+  })
   const entry: AppWindow = { win, tabs, suggest, prompt }
   windows.add(entry)
 
@@ -312,6 +342,7 @@ function createWindow(options: WindowOptions = {}): Promise<AppWindow> {
     suggest.webContents.close()
     prompt.webContents.close()
     entry.notice?.webContents.close()
+    entry.downloads?.webContents.close()
     windows.delete(entry)
     tabs.destroyAll()
     saveSession()
@@ -486,8 +517,22 @@ function registerIpc(): void {
     popupTabMenu(winOf(sender), tabsOf(sender), int(id), ...coords(x, y))
   )
   listen('ui:downloads-menu', (sender, x, y) =>
-    popupDownloadsMenu(winOf(sender), tabsOf(sender), ...coords(x, y))
+    toggleDownloadsPanel(windowFor(sender), ...coords(x, y))
   )
+  const panelOf = (sender: WebContents) => {
+    const entry = windowFor(sender)
+    return entry.downloads?.webContents === sender ? entry : null
+  }
+  listen('downloads:panel-resize', (sender, height) => {
+    const entry = panelOf(sender)
+    if (!entry?.downloads || typeof height !== 'number') return
+    const bounds = entry.downloads.getBounds()
+    entry.downloads.setBounds({ ...bounds, height: Math.min(560, Math.max(60, Math.ceil(height))) })
+  })
+  listen('downloads:panel-hide', (sender) => {
+    const entry = panelOf(sender)
+    if (entry) hideDownloadsPanel(entry)
+  })
   listen('ui:extensions-menu', (sender, x, y) =>
     popupExtensionsMenu(winOf(sender), tabsOf(sender), ...coords(x, y))
   )
@@ -553,7 +598,9 @@ function registerIpc(): void {
     updateBookmark(str(id), str(title), target)
   })
   handle('bookmarks:remove', (_sender, id) => removeBookmark(str(id)))
-  handle('bookmarks:move', (_sender, id, parentId) => moveBookmark(str(id), str(parentId)))
+  handle('bookmarks:move', (_sender, id, parentId, index) =>
+    moveBookmark(str(id), str(parentId), index === undefined ? undefined : int(index))
+  )
   handle('bookmarks:toggle', (_sender, url, title) => {
     const target = str(url)
     if (!navigable(target)) throw new TypeError('Invalid URL')

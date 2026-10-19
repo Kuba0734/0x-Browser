@@ -1,3 +1,4 @@
+import { draggableBookmark, folderDropTarget } from '../../shared/bookmark-drag'
 import type { BookmarkNode } from '../../shared/types'
 import {
   api,
@@ -168,6 +169,18 @@ function row(node: BookmarkNode): HTMLElement {
       })
     )
   )
+  const parentId = currentId
+  draggableBookmark(el, node.id, {
+    horizontal: false,
+    folder: !!node.children,
+    onDrop: searchInput.value.trim()
+      ? undefined
+      : (id, position) => {
+          if (position === 'into') return run(api.bookmarks.move(id, node.id))
+          const index = (find(parentId)?.children ?? []).indexOf(node)
+          run(api.bookmarks.move(id, parentId, index + (position === 'after' ? 1 : 0)))
+        }
+  })
   if (seen.has(node.id)) el.classList.add('reveal', 'visible')
   seen.add(node.id)
   return el
@@ -175,8 +188,8 @@ function row(node: BookmarkNode): HTMLElement {
 
 function renderSidebar(): void {
   sidebar.replaceChildren(
-    ...folders(tree).map(([folder, depth]) =>
-      h(
+    ...folders(tree).map(([folder, depth]) => {
+      const el = h(
         'button',
         {
           class: `bm-folder${folder.id === currentId ? ' active' : ''}`,
@@ -186,7 +199,9 @@ function renderSidebar(): void {
         h('span', { icon: 'folder' }),
         h('span', { class: 'bm-folder-title', text: folder.title })
       )
-    )
+      folderDropTarget(el, (id) => run(api.bookmarks.move(id, folder.id), 'Moved'))
+      return el
+    })
   )
 }
 

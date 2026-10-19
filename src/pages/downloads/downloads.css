@@ -38,3 +38,73 @@
   transform-origin: left;
   transition: transform var(--duration-base) var(--ease);
 }
+
+html.panel,
+html.panel body {
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+html.panel body::before {
+  display: none;
+}
+
+html.panel .page {
+  max-width: none;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  animation: panel-open var(--duration-fast) var(--ease) both;
+}
+
+html.panel .page-header {
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+html.panel .page-title {
+  font-size: var(--font-size-lg);
+}
+
+html.panel .card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+html.panel .dl-row {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+html.panel .dl-icon {
+  width: 32px;
+  height: 32px;
+}
+
+html.panel .row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.panel .empty {
+  padding: var(--space-6) 0;
+}
+
+.panel-all {
+  width: 100%;
+  margin-top: var(--space-2);
+  justify-content: center;
+}
+
+@keyframes panel-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}

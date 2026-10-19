@@ -4,6 +4,10 @@ import { api, formatBytes, h, initPage, reveal, skeletons } from '../shared/kit'
 import './downloads.css'
 
 const page = document.getElementById('page')!
+// The toolbar's downloads dropdown loads this page with #panel as a compact overlay.
+const panel = location.hash === '#panel'
+const PANEL_ITEMS = 6
+document.documentElement.classList.toggle('panel', panel)
 const list = h('div', { class: 'card' }, ...skeletons(4))
 const rows = new Map<string, { el: HTMLElement; update: (item: DownloadState) => void }>()
 
@@ -73,7 +77,8 @@ function createRow(id: string) {
   return { el, update }
 }
 
-function apply(items: DownloadState[]): void {
+function apply(all: DownloadState[]): void {
+  const items = panel ? all.slice(0, PANEL_ITEMS) : all
   if (!items.length) {
     rows.clear()
     list.replaceChildren(
@@ -108,6 +113,8 @@ function apply(items: DownloadState[]): void {
   reveal(list.querySelectorAll('.row:not(.reveal)'))
 }
 
+const hidePanel = () => window.ox.send('downloads:panel-hide')
+
 page.append(
   h(
     'header',
@@ -117,21 +124,44 @@ page.append(
       'div',
       { class: 'actions' },
       h('button', {
-        class: 'btn',
+        class: panel ? 'icon-btn' : 'btn',
         icon: 'folder',
-        text: 'Open folder',
+        text: panel ? undefined : 'Open folder',
+        title: 'Open folder',
+        'aria-label': 'Open folder',
         onclick: () => api.downloads.openFolder()
       }),
       h('button', {
-        class: 'btn',
+        class: panel ? 'icon-btn danger' : 'btn',
         icon: 'trash',
-        text: 'Clear list',
+        text: panel ? undefined : 'Clear list',
+        title: 'Clear list',
+        'aria-label': 'Clear list',
         onclick: () => api.downloads.clear()
       })
     )
   ),
   list
 )
+
+if (panel) {
+  page.append(
+    h('button', {
+      class: 'btn panel-all',
+      text: 'Show all downloads',
+      onclick: () => {
+        api.tabs.openInternal('downloads')
+        hidePanel()
+      }
+    })
+  )
+  new ResizeObserver(() => window.ox.send('downloads:panel-resize', page.offsetHeight)).observe(
+    page
+  )
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hidePanel()
+  })
+}
 
 initPage()
 api.downloads.list().then(apply)

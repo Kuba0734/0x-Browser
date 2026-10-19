@@ -680,3 +680,21 @@ svg {
   height: 18px;
   border-radius: 4px;
 }
+
+.bookmark-item.dragging {
+  opacity: 0.35;
+}
+
+.bookmark-item.drop-before {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.bookmark-item.drop-after {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+.bookmark-item.drop-into,
+#bookmark-bar.drop-into {
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+}

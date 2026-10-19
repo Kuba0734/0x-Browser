@@ -80,3 +80,21 @@
   height: 16px;
   border-radius: 3px;
 }
+
+.bm-row.dragging {
+  opacity: 0.35;
+}
+
+.bm-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.bm-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.bm-row.drop-into,
+.bm-folder.drop-into {
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+}

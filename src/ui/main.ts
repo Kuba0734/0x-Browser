@@ -1,3 +1,4 @@
+import { draggableBookmark, folderDropTarget } from '../shared/bookmark-drag'
 import { api } from '../shared/client'
 import { icon, type IconName } from '../shared/icons'
 import { applySettings, SEARCH_ENGINES, type Settings } from '../shared/settings'
@@ -346,7 +347,13 @@ function reportChromeHeight(): void {
 
 function updateSidebarAdd(): void {
   const url = activeTab()?.url ?? ''
-  sidebarAdd.disabled = !/^https?:/.test(url) || !!sidebarSites?.includes(url)
+  const added = !!sidebarSites?.includes(url)
+  sidebarAdd.disabled = !/^https?:/.test(url) || added
+  sidebarAdd.title = added
+    ? 'This site is already in the sidebar'
+    : sidebarAdd.disabled
+      ? 'Open a website to add it to the sidebar'
+      : 'Add current site to sidebar'
 }
 
 function renderSidebar(): void {
@@ -379,12 +386,27 @@ function renderSidebar(): void {
   reportChromeHeight()
 }
 
+const moveBookmark = (id: string, parentId: string, index?: number) =>
+  api.bookmarks.move(id, parentId, index).catch(() => undefined)
+
+folderDropTarget(bookmarkBar, (id) => moveBookmark(id, 'bar'))
+
 function renderBookmarkBar(): void {
   bookmarkBar.hidden = !showBar || barNodes.length === 0
   bookmarkBar.replaceChildren(
-    ...barNodes.map((node) => {
+    ...barNodes.map((node, index) => {
       const item = document.createElement('button')
       item.className = 'bookmark-item'
+      draggableBookmark(item, node.id, {
+        horizontal: true,
+        folder: !!node.children,
+        onDrop: (id, position) =>
+          moveBookmark(
+            id,
+            position === 'into' ? node.id : 'bar',
+            position === 'into' ? undefined : index + (position === 'after' ? 1 : 0)
+          )
+      })
       item.title = node.url ? `${node.title}\n${displayUrl(node.url)}` : node.title
       const favicon = node.url ? faviconFor(node.url) : ''
       if (favicon) {

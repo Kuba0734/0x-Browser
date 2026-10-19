@@ -9,9 +9,8 @@ import {
   type WebContents
 } from 'electron'
 import { SEARCH_ENGINES } from '../shared/settings'
-import type { BookmarkNode, DownloadState, ExtensionInfo } from '../shared/types'
+import type { BookmarkNode, ExtensionInfo } from '../shared/types'
 import { getBookmark, removeBookmark } from './bookmarks'
-import { clearDownloads, listDownloads, openDownload } from './downloads'
 import { listExtensions, openExtensionPopup, setExtensionPinned } from './extensions'
 import type { TabManager } from './tabs'
 import { appActions } from './app-actions'
@@ -119,34 +118,6 @@ export function popupSidebarContext(
     x,
     y
   )
-}
-
-export function popupDownloadsMenu(
-  win: BrowserWindow,
-  tabs: TabManager,
-  x: number,
-  y: number
-): void {
-  const downloads = listDownloads().slice(0, 8)
-  const status = ({ state, receivedBytes, totalBytes }: DownloadState) => {
-    if (state === 'completed') return ''
-    if (state === 'progressing' && totalBytes > 0)
-      return ` (${Math.round((receivedBytes / totalBytes) * 100)}%)`
-    return ` (${state})`
-  }
-  const items: MenuItemConstructorOptions[] = downloads.length
-    ? downloads.map((download) => ({
-        label: label(download.filename) + status(download),
-        enabled: download.state === 'completed',
-        click: () => openDownload(download.id)
-      }))
-    : [{ label: 'No downloads', enabled: false }]
-  items.push(
-    { type: 'separator' },
-    { label: 'Show all downloads', click: () => tabs.openOrActivate(internalUrl('downloads')!) },
-    { label: 'Clear download history', enabled: downloads.length > 0, click: clearDownloads }
-  )
-  popup(win, items, x - 260, y)
 }
 
 export function popupExtensionsMenu(

@@ -78,13 +78,16 @@ export function removeBookmark(id: string): void {
   save()
 }
 
-export function moveBookmark(id: string, parentId: string): void {
+export function moveBookmark(id: string, parentId: string, index?: number): void {
   const found = find(id)
   if (!found?.parent || FIXED_IDS.has(id)) throw new TypeError('Bookmark not found')
   const target = folder(parentId)
   if (find(parentId, found.node)) throw new TypeError('Cannot move a folder into itself')
-  found.parent.children = found.parent.children!.filter((child) => child.id !== id)
-  target.children!.push(found.node)
+  const from = found.parent.children!.indexOf(found.node)
+  found.parent.children!.splice(from, 1)
+  let at = index ?? target.children!.length
+  if (target === found.parent && from < at) at--
+  target.children!.splice(Math.max(0, Math.min(at, target.children!.length)), 0, found.node)
   save()
 }
 
