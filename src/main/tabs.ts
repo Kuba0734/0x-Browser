@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import {
   WebContentsView,
   type BrowserWindow,
+  type BrowserWindowConstructorOptions,
   type Event,
   type ContextMenuParams,
   type Input,
@@ -149,6 +150,28 @@ export class TabManager {
     this.tabs.splice(index, 0, tab)
     this.load(tab, url)
     this.activate(tab.id)
+  }
+
+  // Tabs opened by window.open keep the WebContents Chromium created, so window.opener survives.
+  // Sign-in flows ("Continue" on Google's account chooser) report back through it.
+  openFromOpener(
+    url: string,
+    options: BrowserWindowConstructorOptions,
+    background: boolean
+  ): WebContents {
+    const tab = this.newTab(url)
+    this.tabs.push(tab)
+    const view = this.createView(tab, options)
+    view.setBackgroundColor(backgroundFor(url))
+    const contents = view.webContents
+    applyUserAgent(contents, url)
+    if (entersGoogleSignIn('', url))
+      setImmediate(() =>
+        contents.loadURL(url, { userAgent: userAgentFor(url) }).catch(() => undefined)
+      )
+    if (background) this.emit()
+    else this.activate(tab.id)
+    return contents
   }
 
   tabInfo(id: number) {
@@ -402,28 +425,37 @@ export class TabManager {
   }
 
   // Tabs can move between windows, so view events always go to the tab's current owner.
-  private createView(tab: Tab): WebContentsView {
-    const view = new WebContentsView({ webPreferences: webPreferences() })
+  private createView(tab: Tab, opened?: BrowserWindowConstructorOptions): WebContentsView {
+    const view = new WebContentsView(opened ?? { webPreferences: webPreferences() })
     tab.view = view
     const contents = view.webContents
     const openTab = ({ url }: { url: string }) => {
       if (isWebUrl(url)) tab.owner.create(url)
       return { action: 'deny' as const }
     }
-    // Sign-in flows ("Sign in with Google" etc.) need a real popup with window.opener, so window.open
-    // with window features gets a sandboxed popup window; everything else opens as a regular tab.
-    contents.setWindowOpenHandler((details) =>
-      details.disposition === 'new-window' && isWebUrl(details.url)
-        ? {
-            action: 'allow',
-            overrideBrowserWindowOptions: {
-              autoHideMenuBar: true,
-              backgroundColor: '#ffffff',
-              webPreferences: webPreferences()
-            }
+    // Sign-in flows ("Sign in with Google" etc.) need window.opener, so window.open with window
+    // features gets a sandboxed popup window and new tabs adopt the opened WebContents.
+    contents.setWindowOpenHandler((details) => {
+      if (!isWebUrl(details.url)) return openTab(details)
+      if (details.disposition === 'new-window')
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            autoHideMenuBar: true,
+            backgroundColor: '#ffffff',
+            webPreferences: webPreferences()
           }
-        : openTab(details)
-    )
+        }
+      if (details.disposition === 'foreground-tab' || details.disposition === 'background-tab')
+        return {
+          action: 'allow',
+          outlivesOpener: true,
+          overrideBrowserWindowOptions: { webPreferences: webPreferences() },
+          createWindow: (options) =>
+            tab.owner.openFromOpener(details.url, options, details.disposition === 'background-tab')
+        }
+      return openTab(details)
+    })
     contents.on('did-create-window', (popup, { url }) => {
       popup.removeMenu()
       popup.webContents.setWindowOpenHandler(openTab)
