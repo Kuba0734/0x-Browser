@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { bookmarksHtml, historyCsv } from './export-format.ts'
+import { bookmarksHtml, cookieDetails, historyCsv } from './export-format.ts'
 
 test('bookmarksHtml nests folders and escapes text', () => {
   const html = bookmarksHtml({
@@ -28,4 +28,26 @@ test('historyCsv quotes fields', () => {
     csv,
     'url,title,visit_count,last_visit\r\n"https://a.test/","Say ""hi"", ok","3","1970-01-01T00:00:00.000Z"\r\n'
   )
+})
+
+test('cookieDetails maps exported cookies and rejects bad or expired ones', () => {
+  const base = { name: 'sid', value: 'x', domain: '.example.com', path: '/', secure: true }
+  assert.deepEqual(
+    cookieDetails({ ...base, httpOnly: true, sameSite: 'lax', expirationDate: 2e9 }, 1),
+    {
+      url: 'https://example.com/',
+      name: 'sid',
+      value: 'x',
+      domain: '.example.com',
+      path: '/',
+      secure: true,
+      httpOnly: true,
+      sameSite: 'lax',
+      expirationDate: 2e9
+    }
+  )
+  assert.equal(cookieDetails({ ...base, hostOnly: true }, 1)?.domain, undefined)
+  assert.equal(cookieDetails({ ...base, expirationDate: 5 }, 10), null)
+  assert.equal(cookieDetails({ ...base, domain: 'evil/../x' }, 1), null)
+  assert.equal(cookieDetails('nope', 1), null)
 })

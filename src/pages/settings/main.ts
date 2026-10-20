@@ -376,20 +376,21 @@ function clearData(): HTMLElement {
   )
 }
 
-const EXPORTABLE: [string, string, string][] = [
-  ['bookmarks', 'Bookmarks', 'HTML file that any browser can import'],
-  ['history', 'Browsing history', 'CSV file with every visited page'],
-  ['settings', 'Settings', 'JSON file with your 0x Browser settings']
+const EXPORTABLE: [string, string, string, boolean][] = [
+  ['bookmarks', 'Bookmarks', 'HTML file that any browser can import', true],
+  ['history', 'Browsing history', 'CSV file with every visited page', true],
+  ['settings', 'Settings', 'JSON file with your 0x Browser settings', true],
+  [
+    'cookies',
+    'Cookies',
+    'Keeps you signed in after importing the file in 0x Browser. Anyone with this file can access your accounts, so keep it private.',
+    false
+  ]
 ]
 
 function exportData(): HTMLElement {
-  const choices = EXPORTABLE.map(([kind, label, description]) => {
-    const input = h('input', {
-      class: 'switch',
-      type: 'checkbox',
-      checked: true,
-      'aria-label': label
-    })
+  const choices = EXPORTABLE.map(([kind, label, description, checked]) => {
+    const input = h('input', { class: 'switch', type: 'checkbox', checked, 'aria-label': label })
     return { kind, input, row: setting(label, description, input) }
   })
   const button = h('button', { class: 'btn', icon: 'download', text: 'Export data' })
@@ -411,6 +412,26 @@ function exportData(): HTMLElement {
     { class: 'card' },
     ...choices.map((choice) => choice.row),
     h('div', { class: 'row setting setting-end' }, button)
+  )
+}
+
+function importCookieFile(): HTMLElement {
+  const button = h('button', { class: 'btn', icon: 'import', text: 'Import file' })
+  button.addEventListener('click', async () => {
+    button.disabled = true
+    try {
+      const count = await api.importer.cookieFile()
+      if (count !== null) toast(`Imported ${count} cookies`, 'success')
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    } finally {
+      button.disabled = false
+    }
+  })
+  return h(
+    'div',
+    { class: 'card import-file' },
+    setting('Cookies from 0x Browser', 'Restore a 0x-cookies.json export to stay signed in', button)
   )
 }
 
@@ -531,7 +552,11 @@ page.append(
     h('h2', { class: 'section-title', id: 'privacy', text: 'Clear browsing data' }),
     clearData()
   ),
-  section(h('h2', { class: 'section-title', id: 'import', text: 'Import data' }), importHost),
+  section(
+    h('h2', { class: 'section-title', id: 'import', text: 'Import data' }),
+    importHost,
+    importCookieFile()
+  ),
   section(h('h2', { class: 'section-title', id: 'export', text: 'Export data' }), exportData()),
   section(
     h(

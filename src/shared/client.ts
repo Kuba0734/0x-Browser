@@ -157,6 +157,7 @@ export const api = {
   },
   importer: {
     sources: () => invoke<ImportSource[]>('import:sources'),
-    run: (sourceId: string, kinds: string[]) => invoke<ImportResult>('import:run', sourceId, kinds)
+    run: (sourceId: string, kinds: string[]) => invoke<ImportResult>('import:run', sourceId, kinds),
+    cookieFile: () => invoke<number | null>('import:cookie-file')
   }
 }

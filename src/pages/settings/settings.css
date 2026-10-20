@@ -112,3 +112,7 @@ select.permission-select {
   width: auto;
   height: 30px;
 }
+
+.import-file {
+  margin-top: var(--space-3);
+}

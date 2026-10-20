@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
@@ -55,7 +55,7 @@ import {
 } from './extensions'
 import { appActions } from './app-actions'
 import { isDefaultBrowser, openDefaultAppsSettings } from './default-browser'
-import { bookmarksHtml, historyCsv } from './export-format'
+import { bookmarksHtml, cookieDetails, historyCsv } from './export-format'
 import { allFavicons, clearFavicons, flushFavicons, loadFavicons } from './favicons'
 import {
   allVisits,
@@ -726,8 +726,34 @@ function registerIpc(): void {
     if (selected.has('history')) files.push(['0x-history.csv', historyCsv(allVisits())])
     if (selected.has('settings'))
       files.push(['0x-settings.json', JSON.stringify(getSettings(), null, 2)])
+    if (selected.has('cookies'))
+      files.push([
+        '0x-cookies.json',
+        JSON.stringify(await session.defaultSession.cookies.get({}), null, 2)
+      ])
     await Promise.all(files.map(([name, content]) => writeFile(join(dir, name), content, 'utf8')))
     return dir
+  })
+  handle('import:cookie-file', async (sender) => {
+    const result = await dialog.showOpenDialog(winOf(sender), {
+      title: 'Import cookies',
+      filters: [{ name: '0x Browser cookies', extensions: ['json'] }],
+      properties: ['openFile']
+    })
+    const file = result.filePaths[0]
+    if (result.canceled || !file) return null
+    let list: unknown
+    try {
+      list = JSON.parse(await readFile(file, 'utf8'))
+    } catch {
+      throw new Error('This is not a 0x Browser cookie file')
+    }
+    if (!Array.isArray(list)) throw new Error('This is not a 0x Browser cookie file')
+    const details = list.map((cookie) => cookieDetails(cookie)).filter((cookie) => cookie !== null)
+    const results = await Promise.allSettled(
+      details.map((cookie) => session.defaultSession.cookies.set(cookie))
+    )
+    return results.filter((entry) => entry.status === 'fulfilled').length
   })
   handle('privacy:clear', async (_sender, kinds) => {
     if (!Array.isArray(kinds)) throw new TypeError('Expected list')

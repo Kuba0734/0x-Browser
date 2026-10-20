@@ -1,3 +1,4 @@
+import type { Cookie, CookiesSetDetails } from 'electron'
 import type { BookmarkNode } from '../shared/types'
 
 export type Visit = { url: string; title: string; visit_count: number; last_visit: number }
@@ -35,4 +36,32 @@ export function historyCsv(visits: Visit[]): string {
       .join(',')
   )
   return ['url,title,visit_count,last_visit', ...rows].join('\r\n') + '\r\n'
+}
+
+const SAME_SITE = new Set(['unspecified', 'no_restriction', 'lax', 'strict'])
+
+// Exported cookie files come from disk, so every field is checked before it reaches the session.
+export function cookieDetails(value: unknown, now = Date.now() / 1000): CookiesSetDetails | null {
+  const cookie = value as Partial<Cookie>
+  if (
+    typeof cookie?.name !== 'string' ||
+    typeof cookie.value !== 'string' ||
+    typeof cookie.domain !== 'string' ||
+    !/^\.?[a-z0-9.-]+$/i.test(cookie.domain)
+  )
+    return null
+  if (typeof cookie.expirationDate === 'number' && cookie.expirationDate < now) return null
+  const path = typeof cookie.path === 'string' && cookie.path.startsWith('/') ? cookie.path : '/'
+  const secure = cookie.secure === true
+  return {
+    url: `${secure ? 'https' : 'http'}://${cookie.domain.replace(/^\./, '')}${path}`,
+    name: cookie.name,
+    value: cookie.value,
+    domain: cookie.hostOnly ? undefined : cookie.domain,
+    path,
+    secure,
+    httpOnly: cookie.httpOnly === true,
+    sameSite: SAME_SITE.has(cookie.sameSite ?? '') ? cookie.sameSite : 'unspecified',
+    expirationDate: typeof cookie.expirationDate === 'number' ? cookie.expirationDate : undefined
+  }
 }
