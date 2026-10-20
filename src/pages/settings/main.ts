@@ -376,6 +376,44 @@ function clearData(): HTMLElement {
   )
 }
 
+const EXPORTABLE: [string, string, string][] = [
+  ['bookmarks', 'Bookmarks', 'HTML file that any browser can import'],
+  ['history', 'Browsing history', 'CSV file with every visited page'],
+  ['settings', 'Settings', 'JSON file with your 0x Browser settings']
+]
+
+function exportData(): HTMLElement {
+  const choices = EXPORTABLE.map(([kind, label, description]) => {
+    const input = h('input', {
+      class: 'switch',
+      type: 'checkbox',
+      checked: true,
+      'aria-label': label
+    })
+    return { kind, input, row: setting(label, description, input) }
+  })
+  const button = h('button', { class: 'btn', icon: 'download', text: 'Export data' })
+  button.addEventListener('click', async () => {
+    const kinds = choices.filter((choice) => choice.input.checked).map((choice) => choice.kind)
+    if (!kinds.length) return toast('Select something to export', 'error')
+    button.disabled = true
+    try {
+      const dir = await api.privacy.export(kinds)
+      if (dir) toast(`Exported to ${dir}`, 'success')
+    } catch (error) {
+      toast(errorMessage(error), 'error')
+    } finally {
+      button.disabled = false
+    }
+  })
+  return h(
+    'div',
+    { class: 'card' },
+    ...choices.map((choice) => choice.row),
+    h('div', { class: 'row setting setting-end' }, button)
+  )
+}
+
 const importHost = h('div', {}, h('div', { class: 'skeleton' }))
 
 const LINKS: [InternalPage, string, IconName][] = [
@@ -494,6 +532,7 @@ page.append(
     clearData()
   ),
   section(h('h2', { class: 'section-title', id: 'import', text: 'Import data' }), importHost),
+  section(h('h2', { class: 'section-title', id: 'export', text: 'Export data' }), exportData()),
   section(
     h(
       'div',

@@ -2,6 +2,7 @@ import { DatabaseSync, type StatementSync } from 'node:sqlite'
 import { join } from 'node:path'
 import { app } from 'electron'
 import type { Completion, TopSite } from '../shared/types'
+import type { Visit } from './export-format'
 
 let db: DatabaseSync | null = null
 let upsertVisit: StatementSync
@@ -63,6 +64,13 @@ export function searchHistory(text: string, limit = 4): TopSite[] {
       ORDER BY visit_count DESC, last_visit DESC LIMIT ?`
     )
     .all(pattern, pattern, limit) as TopSite[]
+}
+
+export function allVisits(): Visit[] {
+  if (!db) return []
+  return db
+    .prepare('SELECT url, title, visit_count, last_visit FROM visits ORDER BY last_visit DESC')
+    .all() as Visit[]
 }
 
 export function topSites(limit = 8): TopSite[] {

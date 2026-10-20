@@ -152,7 +152,8 @@ export const api = {
     onChange: on<SitePermissions[]>('permissions:changed')
   },
   privacy: {
-    clear: (kinds: string[]) => invoke<void>('privacy:clear', kinds)
+    clear: (kinds: string[]) => invoke<void>('privacy:clear', kinds),
+    export: (kinds: string[]) => invoke<string | null>('privacy:export', kinds)
   },
   importer: {
     sources: () => invoke<ImportSource[]>('import:sources'),

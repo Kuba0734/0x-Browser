@@ -1,4 +1,5 @@
 import { statSync } from 'node:fs'
+import { writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
@@ -54,8 +55,10 @@ import {
 } from './extensions'
 import { appActions } from './app-actions'
 import { isDefaultBrowser, openDefaultAppsSettings } from './default-browser'
+import { bookmarksHtml, historyCsv } from './export-format'
 import { allFavicons, clearFavicons, flushFavicons, loadFavicons } from './favicons'
 import {
+  allVisits,
   clearHistory,
   closeHistory,
   completeHistory,
@@ -709,6 +712,23 @@ function registerIpc(): void {
   listen('update:check', () => checkForUpdates())
   listen('update:install', () => installUpdate())
 
+  handle('privacy:export', async (sender, kinds) => {
+    if (!Array.isArray(kinds)) throw new TypeError('Expected list')
+    const selected = new Set(kinds.map(str))
+    const result = await dialog.showOpenDialog(winOf(sender), {
+      title: 'Choose export folder',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    const dir = result.filePaths[0]
+    if (result.canceled || !dir) return null
+    const files: [string, string][] = []
+    if (selected.has('bookmarks')) files.push(['0x-bookmarks.html', bookmarksHtml(bookmarkTree())])
+    if (selected.has('history')) files.push(['0x-history.csv', historyCsv(allVisits())])
+    if (selected.has('settings'))
+      files.push(['0x-settings.json', JSON.stringify(getSettings(), null, 2)])
+    await Promise.all(files.map(([name, content]) => writeFile(join(dir, name), content, 'utf8')))
+    return dir
+  })
   handle('privacy:clear', async (_sender, kinds) => {
     if (!Array.isArray(kinds)) throw new TypeError('Expected list')
     const selected = new Set(kinds.map(str))
