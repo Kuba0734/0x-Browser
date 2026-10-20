@@ -415,13 +415,33 @@ function exportData(): HTMLElement {
   )
 }
 
-function importCookieFile(): HTMLElement {
-  const button = h('button', { class: 'btn', icon: 'import', text: 'Import file' })
+const IMPORTABLE: [string, string, string, boolean][] = [
+  ['bookmarks', 'Bookmarks', 'From 0x-bookmarks.html, added to your bookmarks', true],
+  ['history', 'Browsing history', 'From 0x-history.csv, merged with your history', true],
+  ['settings', 'Settings', 'From 0x-settings.json, replaces your current settings', true],
+  ['cookies', 'Cookies', 'From 0x-cookies.json, keeps you signed in to websites', false]
+]
+
+function importExport(): HTMLElement {
+  const choices = IMPORTABLE.map(([kind, label, description, checked]) => {
+    const input = h('input', { class: 'switch', type: 'checkbox', checked, 'aria-label': label })
+    return { kind, input, row: setting(label, description, input) }
+  })
+  const button = h('button', { class: 'btn', icon: 'import', text: 'Choose folder' })
   button.addEventListener('click', async () => {
+    const kinds = choices.filter((choice) => choice.input.checked).map((choice) => choice.kind)
+    if (!kinds.length) return toast('Select something to import', 'error')
     button.disabled = true
     try {
-      const count = await api.importer.cookieFile()
-      if (count !== null) toast(`Imported ${count} cookies`, 'success')
+      const result = await api.importer.exportFolder(kinds)
+      if (!result) return
+      const parts = [
+        kinds.includes('bookmarks') && `${result.bookmarks} bookmarks`,
+        kinds.includes('history') && `${result.history} history entries`,
+        kinds.includes('settings') && `${result.settings} settings`,
+        kinds.includes('cookies') && `${result.cookies} cookies`
+      ].filter(Boolean)
+      toast(`Imported ${parts.join(', ')}`, 'success')
     } catch (error) {
       toast(errorMessage(error), 'error')
     } finally {
@@ -431,7 +451,12 @@ function importCookieFile(): HTMLElement {
   return h(
     'div',
     { class: 'card import-file' },
-    setting('Cookies from 0x Browser', 'Restore a 0x-cookies.json export to stay signed in', button)
+    h('div', {
+      class: 'card-body muted',
+      text: 'Restore a folder exported from 0x Browser. Missing files are skipped.'
+    }),
+    ...choices.map((choice) => choice.row),
+    h('div', { class: 'row setting setting-end' }, button)
   )
 }
 
@@ -555,7 +580,7 @@ page.append(
   section(
     h('h2', { class: 'section-title', id: 'import', text: 'Import data' }),
     importHost,
-    importCookieFile()
+    importExport()
   ),
   section(h('h2', { class: 'section-title', id: 'export', text: 'Export data' }), exportData()),
   section(

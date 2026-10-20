@@ -97,6 +97,8 @@ export type ImportResult = {
   cookies: number
 }
 
+export type ExportImportResult = ImportResult & { settings: number }
+
 export type Suggestion = {
   kind: 'go' | 'history' | 'search'
   label: string

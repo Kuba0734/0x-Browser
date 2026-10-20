@@ -23,12 +23,14 @@ import {
   addBookmark,
   bookmarkTree,
   getBookmark,
+  importBookmarks,
   loadBookmarks,
   moveBookmark,
   removeBookmark,
   toggleBookmark,
   updateBookmark
 } from './bookmarks'
+import type { ExportImportResult } from '../shared/types'
 import {
   cancelDownload,
   clearDownloads,
@@ -55,13 +57,20 @@ import {
 } from './extensions'
 import { appActions } from './app-actions'
 import { isDefaultBrowser, openDefaultAppsSettings } from './default-browser'
-import { bookmarksHtml, cookieDetails, historyCsv } from './export-format'
+import {
+  bookmarksHtml,
+  cookieDetails,
+  historyCsv,
+  parseBookmarksHtml,
+  parseHistoryCsv
+} from './export-format'
 import { allFavicons, clearFavicons, flushFavicons, loadFavicons } from './favicons'
 import {
   allVisits,
   clearHistory,
   closeHistory,
   completeHistory,
+  importVisits,
   openHistory,
   searchHistory,
   topSites
@@ -95,6 +104,7 @@ import {
 import {
   flushSettings,
   getSettings,
+  importSettings,
   loadSettings,
   onSettingsChange,
   updateSettings
@@ -734,26 +744,56 @@ function registerIpc(): void {
     await Promise.all(files.map(([name, content]) => writeFile(join(dir, name), content, 'utf8')))
     return dir
   })
-  handle('import:cookie-file', async (sender) => {
+  handle('import:0x-export', async (sender, kinds) => {
+    if (!Array.isArray(kinds)) throw new TypeError('Expected list')
+    const selected = new Set(kinds.map(str))
     const result = await dialog.showOpenDialog(winOf(sender), {
-      title: 'Import cookies',
-      filters: [{ name: '0x Browser cookies', extensions: ['json'] }],
-      properties: ['openFile']
+      title: 'Choose a 0x Browser export folder',
+      properties: ['openDirectory']
     })
-    const file = result.filePaths[0]
-    if (result.canceled || !file) return null
-    let list: unknown
-    try {
-      list = JSON.parse(await readFile(file, 'utf8'))
-    } catch {
-      throw new Error('This is not a 0x Browser cookie file')
+    const dir = result.filePaths[0]
+    if (result.canceled || !dir) return null
+    const read = (name: string) => readFile(join(dir, name), 'utf8').catch(() => null)
+    const parseJson = (text: string, kind: string) => {
+      try {
+        return JSON.parse(text) as unknown
+      } catch {
+        throw new Error(`This is not a 0x Browser ${kind} file`)
+      }
     }
-    if (!Array.isArray(list)) throw new Error('This is not a 0x Browser cookie file')
-    const details = list.map((cookie) => cookieDetails(cookie)).filter((cookie) => cookie !== null)
-    const results = await Promise.allSettled(
-      details.map((cookie) => session.defaultSession.cookies.set(cookie))
+    const [bookmarks, history, settings, cookies] = await Promise.all(
+      ['bookmarks', 'history', 'settings', 'cookies'].map((kind, index) =>
+        selected.has(kind)
+          ? read(
+              ['0x-bookmarks.html', '0x-history.csv', '0x-settings.json', '0x-cookies.json'][index]
+            )
+          : null
+      )
     )
-    return results.filter((entry) => entry.status === 'fulfilled').length
+    if (bookmarks === null && history === null && settings === null && cookies === null)
+      throw new Error('No 0x Browser export files found in this folder')
+    const imported: ExportImportResult = {
+      bookmarks: 0,
+      history: 0,
+      cookies: 0,
+      settings: 0
+    }
+    if (bookmarks !== null)
+      imported.bookmarks = importBookmarks('0x Browser', ...parseBookmarksHtml(bookmarks))
+    if (history !== null) imported.history = importVisits(parseHistoryCsv(history))
+    if (settings !== null) imported.settings = importSettings(parseJson(settings, 'settings'))
+    if (cookies !== null) {
+      const list = parseJson(cookies, 'cookie')
+      if (!Array.isArray(list)) throw new Error('This is not a 0x Browser cookie file')
+      const details = list
+        .map((cookie) => cookieDetails(cookie))
+        .filter((cookie) => cookie !== null)
+      const results = await Promise.allSettled(
+        details.map((cookie) => session.defaultSession.cookies.set(cookie))
+      )
+      imported.cookies = results.filter((entry) => entry.status === 'fulfilled').length
+    }
+    return imported
   })
   handle('privacy:clear', async (_sender, kinds) => {
     if (!Array.isArray(kinds)) throw new TypeError('Expected list')

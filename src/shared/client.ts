@@ -6,6 +6,7 @@ import type {
   Completion,
   DownloadState,
   ExtensionInfo,
+  ExportImportResult,
   ImportResult,
   AppInfo,
   ImportSource,
@@ -158,6 +159,6 @@ export const api = {
   importer: {
     sources: () => invoke<ImportSource[]>('import:sources'),
     run: (sourceId: string, kinds: string[]) => invoke<ImportResult>('import:run', sourceId, kinds),
-    cookieFile: () => invoke<number | null>('import:cookie-file')
+    exportFolder: (kinds: string[]) => invoke<ExportImportResult | null>('import:0x-export', kinds)
   }
 }
