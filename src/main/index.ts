@@ -744,7 +744,7 @@ function registerIpc(): void {
     await Promise.all(files.map(([name, content]) => writeFile(join(dir, name), content, 'utf8')))
     return dir
   })
-  handle('import:0x-export', async (sender, kinds) => {
+  handle('import:export-folder', async (sender, kinds) => {
     if (!Array.isArray(kinds)) throw new TypeError('Expected list')
     const selected = new Set(kinds.map(str))
     const result = await dialog.showOpenDialog(winOf(sender), {

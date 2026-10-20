@@ -159,6 +159,7 @@ export const api = {
   importer: {
     sources: () => invoke<ImportSource[]>('import:sources'),
     run: (sourceId: string, kinds: string[]) => invoke<ImportResult>('import:run', sourceId, kinds),
-    exportFolder: (kinds: string[]) => invoke<ExportImportResult | null>('import:0x-export', kinds)
+    exportFolder: (kinds: string[]) =>
+      invoke<ExportImportResult | null>('import:export-folder', kinds)
   }
 }
