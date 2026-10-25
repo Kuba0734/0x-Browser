@@ -6,7 +6,8 @@ export const PERMISSIONS = {
   midi: 'Use your MIDI devices',
   'clipboard-read': 'See text and images you copied',
   'idle-detection': 'Know when you are using this device',
-  'window-management': 'Manage windows on all your displays'
+  'window-management': 'Manage windows on all your displays',
+  'external-apps': 'Open apps on your computer'
 }
 
 export const PERMISSION_NAMES: Record<keyof typeof PERMISSIONS, string> = {
@@ -17,7 +18,8 @@ export const PERMISSION_NAMES: Record<keyof typeof PERMISSIONS, string> = {
   midi: 'MIDI devices',
   'clipboard-read': 'Clipboard',
   'idle-detection': 'Idle detection',
-  'window-management': 'Window management'
+  'window-management': 'Window management',
+  'external-apps': 'Open apps'
 }
 
 export type PermissionKey = keyof typeof PERMISSIONS

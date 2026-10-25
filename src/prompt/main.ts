@@ -10,7 +10,8 @@ const ICONS: Record<PermissionKey, IconName> = {
   midi: 'performance',
   'clipboard-read': 'copy',
   'idle-detection': 'moon',
-  'window-management': 'open'
+  'window-management': 'open',
+  'external-apps': 'open'
 }
 
 const card = document.getElementById('card') as HTMLElement

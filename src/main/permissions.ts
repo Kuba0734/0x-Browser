@@ -31,6 +31,34 @@ const ALWAYS_ALLOWED = new Set([
   'speaker-selection'
 ])
 
+// Links that hand off to installed apps (zoommtg:, msteams:, ...) need the user's consent per site.
+// Schemes that run local files or Windows tools are never handed off, like in Chrome.
+const BLOCKED_SCHEMES = new Set([
+  'file:',
+  'javascript:',
+  'vbscript:',
+  'data:',
+  'view-source:',
+  'shell:',
+  'hcp:',
+  'ms-msdt:',
+  'search-ms:',
+  'search:',
+  'ms-officecmd:',
+  'ms-cxh:',
+  'ms-cxh-full:',
+  'ms-help:',
+  'res:'
+])
+
+const isAllowedExternal = (url = '') => {
+  try {
+    return !BLOCKED_SCHEMES.has(new URL(url).protocol.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
 const QUERYABLE: PermissionKey[] = ['camera', 'microphone', 'geolocation', 'notifications', 'midi']
 
 let store: Record<string, Partial<Record<PermissionKey, Decision>>> = {}
@@ -46,6 +74,7 @@ function keysFor(permission: string, mediaTypes: string[] = []): PermissionKey[]
     ]
   if (permission === 'midiSysex') return ['midi']
   if (permission === 'geolocation-approximate') return ['geolocation']
+  if (permission === 'openExternal') return ['external-apps']
   return isPermissionKey(permission) ? [permission] : []
 }
 
@@ -160,9 +189,14 @@ export function initPermissions(
 ): void {
   session.setPermissionRequestHandler((contents, permission, callback, details) => {
     if (ALWAYS_ALLOWED.has(permission)) return callback(true)
+    if (
+      permission === 'openExternal' &&
+      !isAllowedExternal('externalURL' in details ? details.externalURL : '')
+    )
+      return callback(false)
     const mediaTypes = 'mediaTypes' in details ? (details.mediaTypes ?? []) : []
     const keys = keysFor(permission, mediaTypes)
-    const origin = originOf(details.requestingUrl)
+    const origin = originOf(details.requestingUrl || contents.getURL())
     const presenter = presenterFor(contents)
     if (!keys.length || !origin || !presenter) return callback(false)
     const decisions = keys.map((key) => decision(origin, key))
