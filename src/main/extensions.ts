@@ -22,16 +22,23 @@ type Manifest = Record<string, unknown> & {
   browser_action?: { default_popup?: string }
   options_page?: string
   options_ui?: { page?: string }
+  permissions?: unknown[]
 }
 
 const FILE = 'extensions.json'
 const TAR = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
 const extensions = () => session.defaultSession.extensions
 let installed: Installed[] = []
+const changeListeners: (() => void)[] = []
 
 function save(): void {
   writeJson(FILE, installed)
   broadcast('extensions:changed', listExtensions())
+  for (const listener of changeListeners) listener()
+}
+
+export function onExtensionsChange(listener: () => void): void {
+  changeListeners.push(listener)
 }
 
 function readManifest(dir: string): Manifest {
@@ -199,6 +206,17 @@ export function removeExtension(id: string): void {
   rmSync(item.dir, { recursive: true, force: true })
   installed = installed.filter((other) => other !== item)
   save()
+}
+
+export function hasWebRequestExtension(): boolean {
+  return installed.some((item) => {
+    if (!item.enabled) return false
+    try {
+      return !!readManifest(item.dir).permissions?.includes('webRequest')
+    } catch {
+      return false
+    }
+  })
 }
 
 export function extensionOptionsUrl(id: string): string {

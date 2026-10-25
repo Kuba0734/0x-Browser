@@ -46,10 +46,12 @@ import {
 } from './downloads'
 import {
   extensionOptionsUrl,
+  hasWebRequestExtension,
   installFromFolder,
   installFromStore,
   listExtensions,
   loadExtensions,
+  onExtensionsChange,
   openExtensionPopup,
   removeExtension,
   setExtensionEnabled,
@@ -112,6 +114,7 @@ import {
 import { handleShortcut } from './shortcuts'
 import { createSaver, readJson } from './store'
 import { TabManager, type SavedWindow, type Tab } from './tabs'
+import { initTrackerBlocking } from './trackers'
 import { checkForUpdates, initUpdater, installUpdate, updateState } from './updater'
 import { internalUrl, isFileUrl, isInternalUrl, isWebUrl, resolveInput } from './url'
 
@@ -864,6 +867,8 @@ app.whenReady().then(async () => {
       filePath: join(__dirname, '../preload/extension.js')
     })
   await loadExtensions()
+  const updateTrackers = initTrackerBlocking(session.defaultSession, hasWebRequestExtension())
+  onExtensionsChange(() => updateTrackers(hasWebRequestExtension()))
   const saved = loadSession()
   const [first] = await Promise.all(
     (saved.length ? saved : [undefined]).map((entry) => createWindow({ saved: entry }))

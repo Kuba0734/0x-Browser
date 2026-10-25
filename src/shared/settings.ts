@@ -31,6 +31,7 @@ export type SearchEngine = keyof typeof SEARCH_ENGINES
 export type Settings = {
   searchEngine: SearchEngine
   searchSuggestions: boolean
+  blockTrackers: boolean
   showBookmarkBar: boolean
   showSidebar: boolean
   sidebarSites: string[]
@@ -46,6 +47,7 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   searchEngine: 'google',
   searchSuggestions: true,
+  blockTrackers: true,
   showBookmarkBar: true,
   showSidebar: false,
   sidebarSites: [],

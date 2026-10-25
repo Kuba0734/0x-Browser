@@ -81,6 +81,20 @@ if (location.protocol === 'https:' || location.protocol === 'http:') {
   })
 }
 
+// Global Privacy Control tells sites not to sell or share the user's data (legally binding in some regions).
+if (
+  (location.protocol === 'https:' || location.protocol === 'http:') &&
+  ipcRenderer.sendSync('privacy:gpc') === true
+) {
+  contextBridge.executeInMainWorld({
+    func: () =>
+      Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', {
+        get: () => true,
+        configurable: true
+      })
+  })
+}
+
 // Google sign-in gets a Firefox user agent (see main/compat.ts) and compares it with what scripts
 // see, so Chromium-only navigator values and window.chrome must not give it away.
 if (location.hostname === 'accounts.google.com') {

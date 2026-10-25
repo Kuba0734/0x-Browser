@@ -53,6 +53,7 @@ function toggle(
     | 'askDownloadLocation'
     | 'forceDarkWeb'
     | 'searchSuggestions'
+    | 'blockTrackers'
     | 'showMostVisited'
 ): HTMLInputElement {
   const input = h('input', {
@@ -534,6 +535,11 @@ page.append(
         'Search suggestions',
         'Shows suggestions while you type. What you type is sent to your search engine.',
         toggle('searchSuggestions')
+      ),
+      setting(
+        'Block trackers',
+        'Stops analytics, ad tracking and session recording scripts and asks sites not to sell or share your data. Pages keep working. Paused while a content blocker extension is enabled.',
+        toggle('blockTrackers')
       ),
       setting(
         'Show most visited sites',
