@@ -87,11 +87,12 @@ if (
   ipcRenderer.sendSync('privacy:gpc') === true
 ) {
   contextBridge.executeInMainWorld({
-    func: () =>
+    func: () => {
       Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', {
         get: () => true,
         configurable: true
       })
+    }
   })
 }
 
