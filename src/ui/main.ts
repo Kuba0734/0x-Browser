@@ -77,7 +77,7 @@ function createTabEl(id: number): HTMLElement {
   const el = document.createElement('div')
   el.className = 'tab'
   el.setAttribute('role', 'tab')
-  el.innerHTML = `<span class="tab-icon"><span class="tab-glyph"></span><img alt="" hidden><span class="spinner"></span></span><span class="tab-title"></span><button class="tab-close" title="Close tab" aria-label="Close tab">${icon('close')}</button>`
+  el.innerHTML = `<span class="tab-icon"><span class="tab-glyph"></span><img alt="" hidden><span class="spinner"></span></span><span class="tab-title"></span><button class="tab-audio" hidden></button><button class="tab-close" title="Close tab" aria-label="Close tab">${icon('close')}</button>`
   el.draggable = true
   el.addEventListener('mousedown', (event) => {
     if (event.button === 0) api.tabs.activate(id)
@@ -96,6 +96,13 @@ function createTabEl(id: number): HTMLElement {
   close.addEventListener('mousedown', (event) => event.stopPropagation())
   close.draggable = false
   close.addEventListener('click', () => closeTab(id))
+  const audio = el.querySelector('.tab-audio') as HTMLButtonElement
+  audio.addEventListener('mousedown', (event) => event.stopPropagation())
+  audio.draggable = false
+  audio.addEventListener('click', () => {
+    const tab = state.tabs.find((entry) => entry.id === id)
+    if (tab) api.tabs.mute(id, !tab.muted)
+  })
   const img = el.querySelector('img') as HTMLImageElement
   img.addEventListener('error', () => {
     img.hidden = true
@@ -119,6 +126,16 @@ function updateTabEl(el: HTMLElement, tab: TabState): void {
   if (glyph.dataset.name !== glyphName) {
     glyph.dataset.name = glyphName
     glyph.innerHTML = icon(glyphName)
+  }
+  const audio = el.querySelector('.tab-audio') as HTMLButtonElement
+  const audioName = tab.muted ? 'muted' : tab.audible ? 'volume' : ''
+  if (audio.dataset.name !== audioName) {
+    audio.dataset.name = audioName
+    audio.hidden = !audioName
+    if (audioName) audio.innerHTML = icon(audioName)
+    const label = tab.muted ? 'Unmute tab' : 'Mute tab'
+    audio.title = label
+    audio.setAttribute('aria-label', label)
   }
   const img = el.querySelector('img') as HTMLImageElement
   if (img.getAttribute('src') !== tab.favicon) {

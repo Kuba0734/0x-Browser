@@ -5,6 +5,8 @@ export type TabState = {
   favicon: string
   loading: boolean
   sleeping: boolean
+  audible: boolean
+  muted: boolean
   canGoBack: boolean
   canGoForward: boolean
 }

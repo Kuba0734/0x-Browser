@@ -180,6 +180,42 @@ svg {
   mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
 }
 
+.tab-audio {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  animation: fade-in var(--duration-fast) var(--ease) both;
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.tab-audio[hidden] {
+  display: none;
+}
+
+.tab-audio svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-audio:hover {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.tab-audio:active {
+  transform: scale(0.97);
+}
+
 .tab-close {
   display: grid;
   place-items: center;

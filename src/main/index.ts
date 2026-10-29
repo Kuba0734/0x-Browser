@@ -481,6 +481,7 @@ function registerIpc(): void {
   })
   listen('tabs:close', (sender, id) => tabsOf(sender).close(int(id)))
   listen('tabs:activate', (sender, id) => tabsOf(sender).activate(int(id)))
+  listen('tabs:mute', (sender, id, muted) => tabsOf(sender).setMuted(int(id), bool(muted)))
   listen('tabs:move', (sender, id, index) => tabsOf(sender).move(int(id), int(index)))
   listen('tabs:detach', (sender, id) => {
     const source = windowFor(sender)

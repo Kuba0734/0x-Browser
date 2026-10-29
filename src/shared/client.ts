@@ -44,6 +44,7 @@ export const api = {
     create: (url?: string) => send('tabs:new', url),
     close: (id: number) => send('tabs:close', id),
     activate: (id: number) => send('tabs:activate', id),
+    mute: (id: number, muted: boolean) => send('tabs:mute', id, muted),
     move: (id: number, index: number) => send('tabs:move', id, index),
     detach: (id: number) => send('tabs:detach', id),
     attach: (id: number, index: number) => send('tabs:attach', id, index),

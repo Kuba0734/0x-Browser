@@ -27,6 +27,7 @@ export type Tab = {
   sleeping: boolean
   loadStart: number
   loadMs: number
+  openerId?: number
   sleepTimer?: NodeJS.Timeout
 }
 
@@ -162,10 +163,13 @@ export class TabManager {
   openFromOpener(
     url: string,
     options: BrowserWindowConstructorOptions,
-    background: boolean
+    background: boolean,
+    openerId: number
   ): WebContents {
     const tab = this.newTab(url)
-    this.tabs.push(tab)
+    tab.openerId = openerId
+    const opener = this.byId(openerId)
+    this.tabs.splice(opener ? this.tabs.indexOf(opener) + 1 : this.tabs.length, 0, tab)
     const view = this.createView(tab, options)
     view.setBackgroundColor(backgroundFor(url))
     const contents = view.webContents
@@ -204,7 +208,10 @@ export class TabManager {
   }
 
   setMuted(id: number, muted: boolean): void {
-    this.byId(id)?.view?.webContents.setAudioMuted(muted)
+    const contents = this.byId(id)?.view?.webContents
+    if (!contents) return
+    contents.setAudioMuted(muted)
+    this.emit()
   }
 
   closeOthers(id: number): void {
@@ -468,7 +475,12 @@ export class TabManager {
           outlivesOpener: true,
           overrideBrowserWindowOptions: { webPreferences: webPreferences() },
           createWindow: (options) =>
-            tab.owner.openFromOpener(details.url, options, details.disposition === 'background-tab')
+            tab.owner.openFromOpener(
+              details.url,
+              options,
+              details.disposition === 'background-tab',
+              tab.id
+            )
         }
       return openTab(details)
     })
@@ -515,15 +527,20 @@ export class TabManager {
       tab.owner.patch(tab, { title })
     })
     contents.on('page-favicon-updated', (_event, icons) => tab.owner.updateFavicon(tab, icons))
+    contents.on('audio-state-changed', () => tab.owner.patch(tab, {}))
     contents.on('enter-html-full-screen', () => tab.owner.setFullScreen(tab, true))
     contents.on('leave-html-full-screen', () => tab.owner.setFullScreen(tab, false))
     // A page closing itself (window.close) destroys its WebContents; the tab must not keep the dead view.
+    // Sign-in tabs close themselves after reporting back, so the tab that opened them comes to the front.
     contents.once('destroyed', () => {
       if (tab.view !== view) return
       tab.view = null
       const owner = tab.owner
       if (!owner.win.isDestroyed()) owner.win.contentView.removeChildView(view)
-      if (owner.has(tab.id)) owner.close(tab.id)
+      if (!owner.has(tab.id)) return
+      if (tab.id === owner.activeId && tab.openerId !== undefined && owner.has(tab.openerId))
+        owner.activate(tab.openerId)
+      owner.close(tab.id)
     })
     contents.on('did-navigate', (_event, url) => {
       recordVisit(url, '')
@@ -580,7 +597,8 @@ export class TabManager {
     this.options.onChange({
       activeId: this.activeId,
       tabs: this.tabs.map((tab) => {
-        const history = tab.view?.webContents.navigationHistory
+        const contents = tab.view?.webContents
+        const history = contents?.navigationHistory
         return {
           id: tab.id,
           title: tab.title,
@@ -588,6 +606,8 @@ export class TabManager {
           favicon: tab.favicon,
           loading: tab.loading,
           sleeping: tab.sleeping,
+          audible: !!contents?.isCurrentlyAudible(),
+          muted: !!contents?.isAudioMuted(),
           canGoBack: history?.canGoBack() ?? false,
           canGoForward: history?.canGoForward() ?? false
         }
