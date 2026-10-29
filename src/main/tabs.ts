@@ -91,11 +91,16 @@ export class TabManager {
   private activeId = -1
   private chromeHeight = DEFAULT_CHROME_HEIGHT
   private sidebarWidth = 0
+  private fullScreenId = -1
 
   constructor(win: BrowserWindow, options: Options) {
     this.win = win
     this.options = options
     win.on('resize', () => this.layout())
+    win.on('leave-full-screen', () => {
+      this.fullScreenId = -1
+      this.layout()
+    })
   }
 
   private get active(): Tab | undefined {
@@ -262,6 +267,10 @@ export class TabManager {
     const tab = this.byId(id)
     if (!tab || (this.tabs.length < 2 && !allowLast)) return null
     if (tab.view) this.win.contentView.removeChildView(tab.view)
+    if (this.fullScreenId === id) {
+      this.fullScreenId = -1
+      this.win.setFullScreen(false)
+    }
     if (this.tabs.length === 1) {
       this.tabs.length = 0
       clearTimeout(tab.sleepTimer)
@@ -281,17 +290,23 @@ export class TabManager {
   }
 
   destroyAll(): void {
-    for (const tab of this.tabs) {
+    const tabs = this.tabs.splice(0)
+    for (const tab of tabs) {
       clearTimeout(tab.sleepTimer)
-      tab.view?.webContents.close()
+      const view = tab.view
+      tab.view = null
+      view?.webContents.close()
     }
-    this.tabs.length = 0
   }
 
   activate(id: number): void {
     const tab = this.byId(id)
     if (!tab) return
     const previous = this.active
+    if (this.fullScreenId !== -1 && this.fullScreenId !== id) {
+      this.fullScreenId = -1
+      this.win.setFullScreen(false)
+    }
     this.activeId = id
     clearTimeout(tab.sleepTimer)
     if (previous && previous !== tab) this.scheduleSleep(previous)
@@ -410,10 +425,11 @@ export class TabManager {
   }
 
   private destroyView(tab: Tab): void {
-    if (!tab.view) return
-    this.win.contentView.removeChildView(tab.view)
-    tab.view.webContents.close()
+    const view = tab.view
+    if (!view) return
     tab.view = null
+    this.win.contentView.removeChildView(view)
+    view.webContents.close()
   }
 
   private load(tab: Tab, url: string): void {
@@ -499,6 +515,16 @@ export class TabManager {
       tab.owner.patch(tab, { title })
     })
     contents.on('page-favicon-updated', (_event, icons) => tab.owner.updateFavicon(tab, icons))
+    contents.on('enter-html-full-screen', () => tab.owner.setFullScreen(tab, true))
+    contents.on('leave-html-full-screen', () => tab.owner.setFullScreen(tab, false))
+    // A page closing itself (window.close) destroys its WebContents; the tab must not keep the dead view.
+    contents.once('destroyed', () => {
+      if (tab.view !== view) return
+      tab.view = null
+      const owner = tab.owner
+      if (!owner.win.isDestroyed()) owner.win.contentView.removeChildView(view)
+      if (owner.has(tab.id)) owner.close(tab.id)
+    })
     contents.on('did-navigate', (_event, url) => {
       recordVisit(url, '')
       view.setBackgroundColor(backgroundFor(url))
@@ -528,15 +554,25 @@ export class TabManager {
     if (this.tabs.includes(tab)) this.emit()
   }
 
+  private setFullScreen(tab: Tab, on: boolean): void {
+    if (this.win.isDestroyed() || (on && tab.id !== this.activeId)) return
+    if (this.fullScreenId === (on ? tab.id : -1)) return
+    this.fullScreenId = on ? tab.id : -1
+    this.win.setFullScreen(on)
+    this.layout()
+  }
+
   private layout(): void {
     const view = this.active?.view
     if (!view || this.win.isDestroyed()) return
     const [width, height] = this.win.getContentSize()
+    const top = this.fullScreenId === this.activeId ? 0 : this.chromeHeight
+    const left = this.fullScreenId === this.activeId ? 0 : this.sidebarWidth
     view.setBounds({
-      x: this.sidebarWidth,
-      y: this.chromeHeight,
-      width: Math.max(0, width - this.sidebarWidth),
-      height: Math.max(0, height - this.chromeHeight)
+      x: left,
+      y: top,
+      width: Math.max(0, width - left),
+      height: Math.max(0, height - top)
     })
   }
 
